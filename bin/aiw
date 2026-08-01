@@ -45,38 +45,20 @@ show_version() {
         git_date="unknown"
     fi
 
-    platform="$(uname -s 2>/dev/null || echo "unknown")"
+    platform="$(uname -s 2>/dev/null || echo "Linux") $(uname -m 2>/dev/null || echo "x86_64")"
 
     shell_name="$(basename "${SHELL:-bash}" 2>/dev/null || echo "bash")"
     if [[ -z "${shell_name}" ]]; then
         shell_name="bash"
     fi
 
-    python3 - "${VERSION#v}" "${git_commit}" "${git_date}" "${platform}" "${shell_name}" << 'PYEOF'
-import sys
+    # shellcheck source=lib/table.sh
+    source "${PROJECT_ROOT}/lib/table.sh"
 
-ver, commit, date, plat, sh = sys.argv[1:]
+    local keys=("Version" "Git Commit" "Build Date" "Platform" "Shell")
+    local vals=("v${VERSION#v}" "${git_commit}" "${git_date}" "${platform}" "${shell_name}")
 
-items = [
-    ("Version", f"v{ver}"),
-    ("Git Commit", commit),
-    ("Build Date", date),
-    ("Platform", plat),
-    ("Shell", sh),
-]
-
-col1_w = 17
-col2_w = 20
-
-print("AI Terminal Workspace")
-print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
-print(f"│ {'Property':<{col1_w}} │ {'Value':<{col2_w}} │")
-print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
-for name, val in items:
-    print(f"│ {name:<{col1_w}} │ {val:<{col2_w}} │")
-print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
-print("")
-PYEOF
+    print_kv_table --title "Version Information" --headers "Property" "Value" --align2 L --min-width1 14 --min-width2 30 keys vals
 }
 
 dispatch() {

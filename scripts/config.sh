@@ -40,10 +40,48 @@ case "${subcmd}" in
         python3 "${RESOLVER_SCRIPT}" init "$@"
         ;;
     show)
-        python3 "${RESOLVER_SCRIPT}" show "$@"
+        # shellcheck source=lib/table.sh
+        source "${PROJECT_ROOT}/lib/table.sh"
+        show_json=$(python3 "${RESOLVER_SCRIPT}" show-data "$@")
+        cfg_file=$(echo "${show_json}" | jq -r '.config_file')
+        exists=$(echo "${show_json}" | jq -r '.exists')
+        endpoint=$(echo "${show_json}" | jq -r '.endpoint')
+        exists_str="Not Found"
+        if [[ "${exists}" == "true" ]]; then exists_str="Exists"; fi
+        cfg_file_val="${cfg_file} (${exists_str})"
+
+        keys=("Config File" "Ollama Endpoint")
+        vals=("${cfg_file_val}" "${endpoint}")
+        print_kv_table --title "Configuration Summary" --headers "Property" "Value" --align2 L --min-width1 17 --min-width2 40 keys vals
+
+        mapfile -t lines < <(echo "${show_json}" | jq -r '.content_lines[]')
+        max_w=40
+        for l in "${lines[@]}"; do
+            if (( ${#l} > max_w )); then max_w=${#l}; fi
+        done
+
+        headers=()
+        aligns=("L")
+        data=()
+        for l in "${lines[@]}"; do
+            data+=( "${l}" )
+        done
+
+        print_table --title "Config File Contents" --no-header --min-widths "${max_w}" headers aligns data
         ;;
     test)
-        python3 "${RESOLVER_SCRIPT}" test "$@"
+        # shellcheck source=lib/table.sh
+        source "${PROJECT_ROOT}/lib/table.sh"
+        test_json=$(python3 "${RESOLVER_SCRIPT}" test-data "$@")
+        ep=$(echo "${test_json}" | jq -r '.endpoint')
+        reach=$(echo "${test_json}" | jq -r '.reachability')
+        ver=$(echo "${test_json}" | jq -r '.version')
+        count=$(echo "${test_json}" | jq -r '.model_count')
+        lat=$(echo "${test_json}" | jq -r '.latency')
+
+        keys=("Endpoint" "Reachability" "Ollama Version" "Installed Model Count" "Request Latency")
+        vals=("${ep}" "${reach}" "${ver}" "${count}" "${lat}")
+        print_kv_table --title "Configuration Test" --headers "Parameter" "Value" --align2 L --min-width1 23 --min-width2 30 keys vals
         ;;
     set)
         if [[ $# -lt 2 ]]; then

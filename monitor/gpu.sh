@@ -67,34 +67,38 @@ collect_metrics() {
 }
 
 print_pretty() {
-    python3 - "$UTILIZATION_PERCENT" "$VRAM_USED_MB" "$VRAM_TOTAL_MB" "$POWER_W" "$EDGE_TEMP_C" "$HOTSPOT_TEMP_C" "$MEMORY_TEMP_C" "$FAN_RPM" "$GPU_CLOCK_MHZ" "$MEMORY_CLOCK_MHZ" << 'PYEOF'
-import sys
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local project_root
+    project_root="$(cd "${script_dir}/.." && pwd)"
 
-util, v_used, v_tot, power, e_temp, h_temp, m_temp, fan, g_clk, m_clk = sys.argv[1:]
+    # shellcheck source=lib/table.sh
+    source "${project_root}/lib/table.sh"
 
-metrics = [
-    ("Utilization", f"{util} %"),
-    ("VRAM", f"{v_used} / {v_tot} MB"),
-    ("Power", f"{power} W"),
-    ("Edge Temp", f"{e_temp} °C"),
-    ("Hotspot", f"{h_temp} °C"),
-    ("Memory Temp", f"{m_temp} °C"),
-    ("Fan Speed", f"{fan} RPM"),
-    ("GPU Clock", f"{g_clk} MHz"),
-    ("Mem Clock", f"{m_clk} MHz"),
-]
+    local metrics=(
+        "Utilization"
+        "VRAM"
+        "Power"
+        "Edge Temp"
+        "Hotspot"
+        "Memory Temp"
+        "Fan Speed"
+        "GPU Clock"
+        "Mem Clock"
+    )
+    local vals=(
+        "${UTILIZATION_PERCENT} %"
+        "${VRAM_USED_MB} / ${VRAM_TOTAL_MB} MB"
+        "${POWER_W} W"
+        "${EDGE_TEMP_C} °C"
+        "${HOTSPOT_TEMP_C} °C"
+        "${MEMORY_TEMP_C} °C"
+        "${FAN_RPM} RPM"
+        "${GPU_CLOCK_MHZ} MHz"
+        "${MEMORY_CLOCK_MHZ} MHz"
+    )
 
-col1_w = 17
-col2_w = 20
-
-print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
-print(f"│ {'Metric':<{col1_w}} │ {'Value':>{col2_w}} │")
-print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
-for name, val in metrics:
-    print(f"│ {name:<{col1_w}} │ {val:>{col2_w}} │")
-print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
-print("")
-PYEOF
+    print_kv_table --title "GPU Telemetry" --headers "Metric" "Value" --align2 R --min-width1 17 --min-width2 20 metrics vals
 }
 
 print_json() {

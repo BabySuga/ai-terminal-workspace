@@ -288,49 +288,38 @@ PYEOF
     approx_tokens=$(echo "${bench_result}" | jq -r '.approx_tokens')
 
     # 4. Display benchmark summary for this single run
-    python3 - "${model}" "${ttft_ms}" "${gen_speed}" "${latency_s}" "${chars}" "${words}" "${approx_tokens}" "${vram_before}" "${power_before}" "${vram_after}" "${power_after}" << 'PYEOF'
-import sys
+    # shellcheck source=lib/table.sh
+    source "${PROJECT_ROOT}/lib/table.sh"
 
-model, ttft_ms, gen_speed, latency_s, chars, words, approx_tokens, v_bef, p_bef, v_aft, p_aft = sys.argv[1:]
+    local metrics=(
+        "Model"
+        "TTFT"
+        "Generation Speed"
+        "Latency"
+        "Characters"
+        "Words"
+        "Approx Tokens"
+    )
+    local vals=(
+        "${model}"
+        "$(printf "%.0f ms" "${ttft_ms}")"
+        "$(printf "%.0f tok/s" "${gen_speed}")"
+        "$(printf "%.2f s" "${latency_s}")"
+        "$(printf "%.0f" "${chars}")"
+        "$(printf "%.0f" "${words}")"
+        "$(printf "%.0f" "${approx_tokens}")"
+    )
 
-print("Benchmark Results")
-metrics = [
-    ("Model", model),
-    ("TTFT", f"{int(ttft_ms)} ms"),
-    ("Generation Speed", f"{int(gen_speed)} tok/s"),
-    ("Latency", f"{float(latency_s):.2f} s"),
-    ("Characters", f"{int(chars)}"),
-    ("Words", f"{int(words)}"),
-    ("Approx Tokens", f"{int(approx_tokens)}"),
-]
+    print_kv_table --title "Benchmark Results" --headers "Metric" "Value" --align2 R --min-width1 17 --min-width2 20 metrics vals
 
-col1_w = 17
-col2_w = max(20, len(model))
+    local gpu_headers=("Metric" "Before" "After")
+    local gpu_aligns=("L" "R" "R")
+    local gpu_data=(
+        "VRAM" "${vram_before}" "${vram_after}"
+        "Power" "${power_before}" "${power_after}"
+    )
 
-print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
-print(f"│ {'Metric':<{col1_w}} │ {'Value':>{col2_w}} │")
-print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
-for name, val in metrics:
-    if name == "Model":
-        print(f"│ {name:<{col1_w}} │ {val:<{col2_w}} │")
-    else:
-        print(f"│ {name:<{col1_w}} │ {val:>{col2_w}} │")
-print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
-print("")
-
-print("GPU Telemetry")
-col_g1 = 17
-col_g2 = max(18, len(v_bef), len(p_bef))
-col_g3 = max(18, len(v_aft), len(p_aft))
-
-print(f"┌{'─' * (col_g1 + 2)}┬{'─' * (col_g2 + 2)}┬{'─' * (col_g3 + 2)}┐")
-print(f"│ {'Metric':<{col_g1}} │ {'Before':>{col_g2}} │ {'After':>{col_g3}} │")
-print(f"├{'─' * (col_g1 + 2)}┼{'─' * (col_g2 + 2)}┼{'─' * (col_g3 + 2)}┤")
-print(f"│ {'VRAM':<{col_g1}} │ {v_bef:>{col_g2}} │ {v_aft:>{col_g3}} │")
-print(f"│ {'Power':<{col_g1}} │ {p_bef:>{col_g2}} │ {p_aft:>{col_g3}} │")
-print(f"└{'─' * (col_g1 + 2)}┴{'─' * (col_g2 + 2)}┴{'─' * (col_g3 + 2)}┘")
-print("")
-PYEOF
+    print_table --title "GPU Telemetry" --min-widths "17 18 18" gpu_headers gpu_aligns gpu_data
 
     # Return metric values for caller
     RESULT_TTFT_MS="${ttft_ms}"
@@ -490,45 +479,48 @@ PYEOF
         fi
     done
 
-    # Print concise summary table
-    python3 - "${summary_json}" << 'PYEOF'
-import sys, json
+    # Print concise summary table and summary footer
+    # shellcheck source=lib/table.sh
+    source "${PROJECT_ROOT}/lib/table.sh"
 
-results = json.loads(sys.argv[1])
-if not results:
-    sys.exit(0)
+    local summary_count
+    summary_count=$(echo "${summary_json}" | jq 'length' 2>/dev/null || echo "0")
 
-print("Benchmark Summary")
+    if (( summary_count > 0 )); then
+        local headers=("Model" "TTFT" "TPS" "Latency")
+        local aligns=("L" "R" "R" "R")
+        local data=()
 
-model_w = max(20, max(len(r["model"]) for r in results))
-ttft_w = 10
-tps_w = 10
-lat_w = 10
+        local successful_count
+        successful_count=$(echo "${summary_json}" | jq '[.[] | select(.error != true)] | length')
+        local failed_count
+        failed_count=$(echo "${summary_json}" | jq '[.[] | select(.error == true)] | length')
+        local total_latency_sum
+        total_latency_sum=$(echo "${summary_json}" | jq '[.[] | select(.error != true) | .latency_s] | add // 0')
 
-top_border  = f"┌{'─' * (model_w + 2)}┬{'─' * (ttft_w + 2)}┬{'─' * (tps_w + 2)}┬{'─' * (lat_w + 2)}┐"
-header_line = f"│ {'Model':<{model_w}} │ {'TTFT':>{ttft_w}} │ {'TPS':>{tps_w}} │ {'Latency':>{lat_w}} │"
-mid_border  = f"├{'─' * (model_w + 2)}┼{'─' * (ttft_w + 2)}┼{'─' * (tps_w + 2)}┼{'─' * (lat_w + 2)}┤"
-bot_border  = f"└{'─' * (model_w + 2)}┴{'─' * (ttft_w + 2)}┴{'─' * (tps_w + 2)}┴{'─' * (lat_w + 2)}┘"
+        mapfile -t model_rows < <(echo "${summary_json}" | jq -r '.[] | [.model, (if .error then "Error" else (((.ttft_ms / 1000 * 100 | round / 100) | tostring) + "s") end), (if .error then "Error" else (.gen_speed | round | tostring) end), (if .error then "Error" else (((.latency_s * 10 | round / 10) | tostring) + "s") end)] | join("\t")' 2>/dev/null)
 
-print(top_border)
-print(header_line)
-print(mid_border)
+        local row
+        for row in "${model_rows[@]}"; do
+            IFS=$'\t' read -r m_name ttft_str tps_str lat_str <<< "${row}"
+            data+=( "${m_name}" "${ttft_str}" "${tps_str}" "${lat_str}" )
+        done
 
-for r in results:
-    model = r["model"]
-    if r.get("error"):
-        ttft_str = "Error"
-        tps_str = "Error"
-        lat_str = "Error"
-    else:
-        ttft_str = f"{r['ttft_ms'] / 1000.0:.2f}s"
-        tps_str = f"{int(r['gen_speed'])}"
-        lat_str = f"{r['latency_s']:.1f}s"
-    print(f"│ {model:<{model_w}} │ {ttft_str:>{ttft_w}} │ {tps_str:>{tps_w}} │ {lat_str:>{lat_w}} │")
+        print_table --title "Benchmark Summary" --row-separators --min-widths "20 10 10 10" headers aligns data
 
-print(bot_border)
-print("")
-PYEOF
+        local total_time_fmt
+        total_time_fmt=$(jq -n --argjson total "${total_latency_sum}" '
+            if $total >= 60 then
+              (($total / 60 | floor | tostring) + "m " + ((($total % 60 | floor) | tostring) + "s"))
+            else
+              ((($total * 10 | round / 10) | tostring) + "s")
+            end
+        ' -r)
+
+        local sum_keys=("Models Tested" "Successful" "Failed" "Total Time")
+        local sum_vals=("${summary_count}" "${successful_count}" "${failed_count}" "${total_time_fmt}")
+        print_kv_table --title "Summary" --no-header --align2 R --min-width1 28 --min-width2 11 sum_keys sum_vals
+    fi
 }
 
 main "$@"

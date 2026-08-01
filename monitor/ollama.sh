@@ -100,61 +100,33 @@ print_pretty() {
         version_display="N/A"
     fi
 
-    python3 - "${version_display}" "${status_display}" "${LOADED_MODELS}" "${RUNNING_MODELS_JSON}" << 'PYEOF'
-import sys, json
+    # shellcheck source=lib/table.sh
+    source "${PROJECT_ROOT}/lib/table.sh"
 
-version, status, loaded_count, models_json = sys.argv[1:]
+    local keys=("Version" "Status" "Loaded Models")
+    local vals=("${version_display}" "${status_display}" "${LOADED_MODELS}")
 
-print("Ollama Runtime Status")
-col1_w = 17
-col2_w = 20
+    print_kv_table --title "Ollama Runtime" --headers "Metric" "Value" --align2 R --min-width1 17 --min-width2 20 keys vals
 
-print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
-print(f"│ {'Metric':<{col1_w}} │ {'Value':<{col2_w}} │")
-print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
-print(f"│ {'Version':<{col1_w}} │ {version:<{col2_w}} │")
-print(f"│ {'Status':<{col1_w}} │ {status:<{col2_w}} │")
-print(f"│ {'Loaded Models':<{col1_w}} │ {loaded_count:>{col2_w}} │")
-print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
-print("")
+    local headers=("Model" "Processor" "Size" "Quantization" "Context")
+    local aligns=("L" "L" "L" "L" "R")
+    local data=()
 
-models = json.loads(models_json)
-print("Loaded Models")
+    local count
+    count=$(echo "${RUNNING_MODELS_JSON}" | jq 'length' 2>/dev/null || echo "0")
 
-m_w = 22
-p_w = 12
-s_w = 10
-q_w = 14
-c_w = 10
+    if (( count > 0 )); then
+        mapfile -t model_rows < <(echo "${RUNNING_MODELS_JSON}" | jq -r '.[] | [.model_name, .processor, .size, .quantization, (.context_length | tostring)] | map(. // "N/A") | join("\t")' 2>/dev/null)
+        local row
+        for row in "${model_rows[@]}"; do
+            IFS=$'\t' read -r m_name m_proc m_size m_quant m_ctx <<< "${row}"
+            data+=( "${m_name}" "${m_proc}" "${m_size}" "${m_quant}" "${m_ctx}" )
+        done
+    else
+        data+=( "(No models loaded)" "-" "-" "-" "-" )
+    fi
 
-if models:
-    for m in models:
-        m_w = max(m_w, len(str(m.get("model_name") or "")))
-
-top_b = f"┌{'─' * (m_w + 2)}┬{'─' * (p_w + 2)}┬{'─' * (s_w + 2)}┬{'─' * (q_w + 2)}┬{'─' * (c_w + 2)}┐"
-hdr   = f"│ {'Model':<{m_w}} │ {'Processor':<{p_w}} │ {'Size':<{s_w}} │ {'Quantization':<{q_w}} │ {'Context':>{c_w}} │"
-mid_b = f"├{'─' * (m_w + 2)}┼{'─' * (p_w + 2)}┼{'─' * (s_w + 2)}┼{'─' * (q_w + 2)}┼{'─' * (c_w + 2)}┤"
-bot_b = f"└{'─' * (m_w + 2)}┴{'─' * (p_w + 2)}┴{'─' * (s_w + 2)}┴{'─' * (q_w + 2)}┴{'─' * (c_w + 2)}┘"
-
-print(top_b)
-print(hdr)
-print(mid_b)
-
-if models:
-    for m in models:
-        name = str(m.get("model_name") or "Unknown")
-        proc = str(m.get("processor") or "N/A")
-        size = str(m.get("size") or "N/A")
-        quant = str(m.get("quantization") or "N/A")
-        ctx = str(m.get("context_length") or "N/A")
-        print(f"│ {name:<{m_w}} │ {proc:<{p_w}} │ {size:<{s_w}} │ {quant:<{q_w}} │ {ctx:>{c_w}} │")
-else:
-    none_str = "(No models loaded)"
-    print(f"│ {none_str:<{m_w}} │ {'-':<{p_w}} │ {'-':<{s_w}} │ {'-':<{q_w}} │ {'-':>{c_w}} │")
-
-print(bot_b)
-print("")
-PYEOF
+    print_table --title "Loaded Models" --min-widths "22 12 10 14 10" headers aligns data
 }
 
 print_json() {

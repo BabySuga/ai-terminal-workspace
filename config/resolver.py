@@ -96,24 +96,8 @@ def cmd_init():
         f.write(DEFAULT_CONFIG_TOML)
     print(f"Initialized default configuration at {CONFIG_PATH}")
 
-def cmd_show(cli_endpoint=None):
+def get_show_data(cli_endpoint=None):
     resolved_endpoint = get_resolved_endpoint(cli_endpoint)
-    exists_str = "Exists" if CONFIG_PATH.is_file() else "Not Found"
-    cfg_file_val = f"{CONFIG_PATH} ({exists_str})"
-
-    col1_w = 17
-    col2_w = max(40, len(cfg_file_val), len(resolved_endpoint))
-
-    print("Configuration Summary")
-    print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
-    print(f"│ {'Property':<{col1_w}} │ {'Value':<{col2_w}} │")
-    print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
-    print(f"│ {'Config File':<{col1_w}} │ {cfg_file_val:<{col2_w}} │")
-    print(f"│ {'Ollama Endpoint':<{col1_w}} │ {resolved_endpoint:<{col2_w}} │")
-    print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
-    print("")
-
-    print("Config File Contents")
     lines = []
     if CONFIG_PATH.is_file():
         try:
@@ -128,14 +112,14 @@ def cmd_show(cli_endpoint=None):
     else:
         lines = ["(No config file found, using defaults)"]
 
-    max_line_w = max(40, max(len(l) for l in lines)) if lines else 40
-    print(f"┌{'─' * (max_line_w + 2)}┐")
-    for l in lines:
-        print(f"│ {l:<{max_line_w}} │")
-    print(f"└{'─' * (max_line_w + 2)}┘")
-    print("")
+    return {
+        "config_file": str(CONFIG_PATH),
+        "exists": CONFIG_PATH.is_file(),
+        "endpoint": resolved_endpoint,
+        "content_lines": lines
+    }
 
-def cmd_test(cli_endpoint=None):
+def get_test_data(cli_endpoint=None):
     endpoint = get_resolved_endpoint(cli_endpoint)
     reachability = "Unreachable"
     version = "N/A"
@@ -164,16 +148,50 @@ def cmd_test(cli_endpoint=None):
         except Exception:
             model_count = "N/A"
 
+    return {
+        "endpoint": endpoint,
+        "reachability": reachability,
+        "version": version,
+        "model_count": model_count,
+        "latency": latency_str
+    }
+
+def cmd_show(cli_endpoint=None):
+    data = get_show_data(cli_endpoint)
+    cfg_file_val = f"{data['config_file']} ({'Exists' if data['exists'] else 'Not Found'})"
+    col1_w = 17
+    col2_w = max(40, len(cfg_file_val), len(data['endpoint']))
+
+    print("Configuration Summary")
+    print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
+    print(f"│ {'Property':<{col1_w}} │ {'Value':<{col2_w}} │")
+    print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
+    print(f"│ {'Config File':<{col1_w}} │ {cfg_file_val:<{col2_w}} │")
+    print(f"│ {'Ollama Endpoint':<{col1_w}} │ {data['endpoint']:<{col2_w}} │")
+    print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
+    print("")
+
+    print("Config File Contents")
+    lines = data['content_lines']
+    max_line_w = max(40, max(len(l) for l in lines)) if lines else 40
+    print(f"┌{'─' * (max_line_w + 2)}┐")
+    for l in lines:
+        print(f"│ {l:<{max_line_w}} │")
+    print(f"└{'─' * (max_line_w + 2)}┘")
+    print("")
+
+def cmd_test(cli_endpoint=None):
+    data = get_test_data(cli_endpoint)
     print("Configuration Test")
     col1_w = 23
-    col2_w = max(30, len(endpoint))
+    col2_w = max(30, len(data['endpoint']))
 
     params = [
-        ("Endpoint", endpoint),
-        ("Reachability", reachability),
-        ("Ollama Version", version),
-        ("Installed Model Count", model_count),
-        ("Request Latency", latency_str),
+        ("Endpoint", data['endpoint']),
+        ("Reachability", data['reachability']),
+        ("Ollama Version", data['version']),
+        ("Installed Model Count", data['model_count']),
+        ("Request Latency", data['latency']),
     ]
 
     print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
@@ -260,6 +278,12 @@ def main():
     if subcmd == "get-endpoint":
         cli_ep, _ = parse_cli_endpoint(args)
         print(get_resolved_endpoint(cli_ep))
+    elif subcmd == "show-data":
+        cli_ep, _ = parse_cli_endpoint(args)
+        print(json.dumps(get_show_data(cli_ep)))
+    elif subcmd == "test-data":
+        cli_ep, _ = parse_cli_endpoint(args)
+        print(json.dumps(get_test_data(cli_ep)))
     elif subcmd == "init":
         cmd_init()
     elif subcmd == "show":
