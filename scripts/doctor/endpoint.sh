@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Module: ollama.sh - Validate Ollama binary existence and server reachability
+# Module: endpoint.sh - Validate Ollama API endpoint reachability
 
-check_ollama() {
-    if ! command -v ollama >/dev/null 2>&1; then
-        return 1
-    fi
+check_endpoint() {
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local project_root="$(cd "${script_dir}/../.." && pwd)"
     local resolver="${project_root}/config/resolver.py"
@@ -19,9 +16,6 @@ check_ollama() {
         if curl -s -f --connect-timeout 2 "${host}/api/version" >/dev/null 2>&1; then
             return 0
         fi
-    elif ollama list >/dev/null 2>&1; then
-        return 0
     fi
-
     return 1
 }
