@@ -1,0 +1,35 @@
+# Editors
+.vscode/
+.idea/
+
+# Swap
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+
+# Cache
+.cache/
+tmp/
+
+# Logs
+logs/
+*.log
+
+# Runtime
+*.pid
+
+# Benchmark outputs
+benchmark/reports/
+benchmark/history/
+
+# Generated reports
+reports/
+output/
+
+# OS
+.DS_Store
+Thumbs.db
