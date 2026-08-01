@@ -1,17 +1,39 @@
 # AI Terminal Workspace
 
+Monitor • Benchmark • Profile Local LLM Workstations
+
 [![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](https://github.com/BabySuga/ai-terminal-workspace)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20ROCm-orange.svg)]()
+[![Linux](https://img.shields.io/badge/platform-Linux-orange.svg)]()
+[![ROCm](https://img.shields.io/badge/backend-ROCm-purple.svg)]()
+[![Bash](https://img.shields.io/badge/shell-Bash-lightgrey.svg)]()
 [![Status](https://img.shields.io/badge/status-v0.1.0--stable-brightgreen.svg)]()
 
-AI Terminal Workspace is a lightweight CLI toolkit for validating, monitoring, and benchmarking local LLM deployments running on Ollama.
+---
+
+## Preview
+
+The screenshots and animated previews below demonstrate the unified command-line workflow for environment checks, real-time hardware telemetry, model state inspection, and interactive streaming benchmarks.
+
+![Hero Showcase](docs/images/hero.png)
+
+### Workflow Previews
+
+- `docs/images/doctor.png` – Environment and dependency preflight diagnostics
+- `docs/images/gpu-monitor.png` – Real-time AMD GPU hardware telemetry monitoring
+- `docs/images/benchmark-summary.png` – Multi-metric model streaming benchmark results
+- `docs/images/interactive.gif` – TUI model multi-selection and benchmark queue runner
+
+![Doctor Preflight](docs/images/doctor.png)
+![GPU Telemetry](docs/images/gpu-monitor.png)
+![Benchmark Summary](docs/images/benchmark-summary.png)
+![Interactive TUI Queue](docs/images/interactive.gif)
 
 ---
 
 ## Quick Start
 
-Get up and running with your first benchmark in under one minute:
+Get up and running with your first local LLM benchmark in less than a minute:
 
 ```bash
 git clone https://github.com/BabySuga/ai-terminal-workspace.git
@@ -23,34 +45,87 @@ aiw benchmark
 
 ---
 
-## Why This Project Exists
+## Who Is This For?
 
-Running local LLMs effectively usually requires juggling multiple disconnected terminal tools and scripts.
-
-Developers and AI engineers often find themselves switching between:
-- `amd-smi` / `nvidia-smi` for hardware telemetry
-- `ollama ps` for active model instances
-- `btop` / `htop` for system resources
-- `sensors` for thermal monitoring
-- `curl` for manual endpoint validation
-- Custom single-use benchmarking scripts
-
-**AI Terminal Workspace** combines these workflows into a single, cohesive CLI designed specifically for local LLM workstations.
+| User | Why |
+| :--- | :--- |
+| **AI Engineers** | Rapidly benchmark model latency, Time-To-First-Token (TTFT), and generation throughput on local hardware. |
+| **ML Engineers** | Profile VRAM utilization, GPU power draw, and thermal behavior across model architectures. |
+| **Infrastructure Engineers** | Validate driver stacks, ROCm runtime status, and Ollama service health across Linux hosts. |
+| **Linux Engineers** | Automate local LLM diagnostics and performance tracking using lightweight CLI utilities and JSON exports. |
+| **Local LLM Enthusiasts** | Compare inference speeds and memory requirements across local models prior to production deployment. |
 
 ---
 
-## Features
+## Why This Project Exists
 
-| Feature | Description |
-| :--- | :--- |
-| **Doctor** | Validates system environment, dependencies, GPU drivers, and Ollama service connectivity. |
-| **Configuration** | Hierarchical priority resolver for endpoints across CLI flags, env vars, TOML config, and defaults. |
-| **GPU Monitoring** | Real-time AMD GPU hardware telemetry capture using `amd-smi`. |
-| **Ollama Monitoring** | Detailed inspection of local Ollama server runtime state and currently loaded models. |
-| **Streaming Benchmark** | High-precision streaming benchmark measuring TTFT, generation speed, total latency, and peak VRAM. |
-| **Interactive Benchmark** | TUI multi-select model picker with interactive queue execution. |
-| **Multi-model Queue** | Sequential benchmark runner across multiple selected or all installed models. |
-| **Repeat Benchmark** | Statistical repeat benchmark runner (`--repeat N`) for consistent average scoring. |
+Running and profiling local LLMs usually requires juggling multiple disconnected terminal utilities and custom ad-hoc scripts.
+
+### Traditional Disconnected Workflow
+
+```text
+amd-smi
+   ↓
+ollama ps
+   ↓
+btop
+   ↓
+sensors
+   ↓
+curl
+   ↓
+manual scripts
+   ↓
+collect metrics
+   ↓
+repeat
+```
+
+### AI Terminal Workspace Workflow
+
+```text
+AI Terminal Workspace
+   ↓
+one CLI
+   ↓
+complete workflow
+```
+
+---
+
+## Why Not Just Use...
+
+| Tool | Purpose | Advantage of AI Terminal Workspace |
+| :--- | :--- | :--- |
+| `ollama run` | Interactive LLM chat | AIW adds TTFT, TPS, peak VRAM, power telemetry, and automated prompt evaluation. |
+| `ollama ps` | List active loaded models | AIW adds detailed model parameter sizing, context limits, and memory footprint inspection. |
+| `amd-smi` | Raw GPU hardware statistics | AIW correlates hardware metrics directly with active LLM inference execution windows. |
+| `btop` | General system monitoring | AIW delivers focused, AI-workload-specific metrics without terminal visual noise. |
+| `curl` | Manual REST API validation | AIW streams API responses while parsing token metrics and generating comparative reports. |
+| **AI Terminal Workspace** | **Unified Local AI Toolkit** | **Integrates preflight checks, GPU telemetry, and streaming benchmarks into one CLI.** |
+
+---
+
+## Feature Matrix
+
+| Capability | Status |
+| :--- | :---: |
+| Doctor | ✅ |
+| Configuration | ✅ |
+| GPU Monitor | ✅ |
+| Ollama Monitor | ✅ |
+| Streaming Benchmark | ✅ |
+| Interactive Benchmark | ✅ |
+| Multiple Model Queue | ✅ |
+| Repeat Benchmark | ✅ |
+| JSON Output | ✅ |
+| Remote Endpoint | ✅ |
+| AMD GPU | ✅ |
+| ROCm | ✅ |
+| Linux | ✅ |
+| NVIDIA GPU | 🚧 |
+| vLLM | 🚧 |
+| llama.cpp | 🚧 |
 
 ---
 
@@ -58,47 +133,25 @@ Developers and AI engineers often find themselves switching between:
 
 Engineered specifically for local AI developers who demand speed, minimalism, and reliability:
 
-| Principle | Rationale |
-| :--- | :--- |
-| **CLI-first** | Native terminal workflow with zero web overhead or complex GUIs. |
-| **Lightweight** | Pure Bash & Python standard library; zero heavyweight external framework dependencies. |
-| **No background daemon** | Operates strictly on-demand without lingering background processes or memory footprints. |
-| **No database** | Simple file-based and stdout operations; no external database setup or migrations required. |
-| **No telemetry** | 100% private and local; zero telemetry or analytics collected. |
-| **Reuse Linux tooling** | Leverages established native tools (`amd-smi`, `curl`, `jq`) instead of reinventing hardware access. |
-| **Human-readable output** | Clean, formatted terminal tables and summary cards for instant visual scanning. |
-| **JSON output** | Built-in JSON formatting support for seamless script integration and pipeline automation. |
+- **CLI-first**: Native terminal workflow with zero web server overhead or complex GUIs.
+- **Lightweight**: Pure Bash and Python standard library; zero heavyweight third-party framework dependencies.
+- **No Daemon**: Operates strictly on-demand without lingering background processes or memory footprints.
+- **No Database**: Simple file-based and stdout operations; no external database setup or migrations required.
+- **No Telemetry**: 100% private and local; zero telemetry, tracking, or remote phone-home code.
+- **Native Linux Tooling**: Leverages established native utilities (`amd-smi`, `curl`, `jq`) instead of custom drivers.
+- **Reusable & Automation Friendly**: Supports clean JSON outputs and stdout formatting for shell piping and CI/CD pipelines.
 
 ---
 
-## Preview
+## Reference Workstation
 
-> [!NOTE]
-> Screenshot placeholders reserved in `docs/images/`. Visual previews will be updated after future release builds.
+Baseline benchmarks and system verifications are conducted on the following local reference workstation:
 
-- `doctor.png` – Environment and dependency preflight check
-- `gpu-monitor.png` – AMD GPU hardware telemetry monitoring
-- `ollama-monitor.png` – Ollama server runtime status and loaded models
-- `interactive-benchmark.gif` – TUI model selection and queue execution
-- `benchmark-summary.png` – Final benchmark performance output
-
-![Doctor](docs/images/doctor.png)
-![GPU Monitor](docs/images/gpu-monitor.png)
-![Ollama Monitor](docs/images/ollama-monitor.png)
-![Interactive Benchmark](docs/images/interactive-benchmark.gif)
-![Benchmark Summary](docs/images/benchmark-summary.png)
-
----
-
-## Reference AI Workstation
-
-Baseline benchmarks and hardware verification are conducted on the following reference workstation:
-
-| Environment | Specification |
+| Component | Specification |
 | :--- | :--- |
 | **OS** | Lubuntu 26.04 |
 | **GPU** | AMD Radeon RX 9060 XT 16GB |
-| **CPU** | Ryzen 5 5600G |
+| **CPU** | AMD Ryzen 5 5600G |
 | **RAM** | 16 GB |
 | **Backend** | ROCm |
 | **Inference Engine** | Ollama |
@@ -109,10 +162,10 @@ Baseline benchmarks and hardware verification are conducted on the following ref
 
 ## Installed Models
 
-Inventory of models installed on the reference AI workstation:
+Inventory of models installed and verified on the reference workstation:
 
 | Model | Category | Purpose | Status |
-| :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :---: |
 | `qwen3:8b` | General LLM | General reasoning, task completion, and primary benchmark target | Installed |
 | `hermes3:8b` | Instruction | Multi-turn conversation and complex instruction adherence | Installed |
 | `deepseek-coder:6.7b` | Code Generation | Code completion, inline synthesis, and technical problem solving | Installed |
@@ -122,165 +175,172 @@ Inventory of models installed on the reference AI workstation:
 
 ---
 
-## Example Benchmark
-
-Real benchmark results captured on the reference workstation using `qwen3:8b`:
-
-```text
-Benchmark
-────────────────────────
-
-Model
-qwen3:8b
-
-Backend
-ROCm
-
-TTFT
-2.12 s
-
-Generation Speed
-50 tok/s
-
-Latency
-11.8 s
-
-GPU
-Peak VRAM
-6.2 GB
-
-Peak Power
-131 W
-
-Output
-Characters
-2326
-
-Words
-395
-
-Approx Tokens
-487
-```
+## Real Benchmark
 
 > [!IMPORTANT]
-> The benchmark output above was collected directly on the reference AI workstation.
-> Real-world benchmark performance depends on your specific GPU hardware, power limits, thermal throttling, quantization, and warm/cold model state.
+> All benchmark metrics listed below were collected directly on the reference workstation using the `aiw benchmark` engine.
+
+### Benchmark Comparison
+
+| Model | Backend | TTFT | TPS | Latency | Peak VRAM | Peak Power | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `qwen3:8b` | ROCm | 2.09 s | 51 tok/s | 9.83 s | 6.13 GB | 124 W | Completed |
+| `hermes3:8b` | ROCm | 4.26 s | 60 tok/s | 6.84 s | 11.15 GB | 57 W | Completed |
+| `deepseek-coder:6.7b` | ROCm | 3.06 s | 66 tok/s | 4.49 s | 6.46 GB | 45 W | Completed |
+| `qwen2.5-coder:7b` | ROCm | 4.29 s | 58 tok/s | 6.95 s | 11.22 GB | 70 W | Completed |
+| `qwen2.5vl:7b` | ROCm | 5.09 s | 50 tok/s | 6.89 s | 7.25 GB | 44 W | Completed |
+| `nomic-embed-text` | ROCm | Embedding Model | N/A | N/A | N/A | N/A | N/A |
+
+### Detailed Telemetry & Output Metrics
+
+| Model | Output Characters | Output Words | Approx Tokens | Idle VRAM | Peak VRAM | Idle Power | Peak Power |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `qwen3:8b` | 1,881 | 323 | 391 | 554 MB | 6,134 MB | 7 W | 124 W |
+| `hermes3:8b` | 772 | 131 | 154 | 6,158 MB | 11,154 MB | 9 W | 57 W |
+| `deepseek-coder:6.7b` | 444 | 73 | 94 | 11,172 MB | 6,463 MB | 8 W | 45 W |
+| `qwen2.5-coder:7b` | 737 | 131 | 153 | 6,471 MB | 11,217 MB | 9 W | 70 W |
+| `qwen2.5vl:7b` | 462 | 80 | 90 | 11,242 MB | 7,245 MB | 9 W | 44 W |
 
 ---
 
-## Benchmark Comparison
+## Benchmark Notes
 
-Comparison matrix across local models (untested models marked as `Pending`):
-
-| Model | Backend | TTFT | TPS | Peak VRAM | Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `qwen3:8b` | ROCm | 2.12 s | 50 tok/s | 6.2 GB | Completed |
-| `hermes3:8b` | ROCm | Pending | Pending | Pending | Pending |
-| `deepseek-coder:6.7b` | ROCm | Pending | Pending | Pending | Pending |
-| `qwen2.5-coder:7b` | ROCm | Pending | Pending | Pending | Pending |
-| `qwen2.5vl:7b` | ROCm | Pending | Pending | Pending | Pending |
-| `nomic-embed-text` | ROCm | Pending | Pending | Pending | Pending |
+- All benchmarks were collected sequentially on the reference workstation using default prompt configurations.
+- Actual benchmark performance in end-user environments will vary based on:
+  - **Hardware Architecture**: GPU core count, memory bandwidth, and bus interface.
+  - **Quantization**: Model weight precision (e.g., Q4_K_M vs. FP16).
+  - **Prompt Complexity**: Input context length and total generation length.
+  - **GPU Clocks & Power**: Active clock frequencies and power limit caps.
+  - **Thermal Conditions**: Thermal throttling thresholds and cooling efficiency.
+  - **Cold vs. Warm State**: Initial cold load from storage into VRAM versus subsequent warm cached runs.
 
 ---
 
 ## Benchmark Metrics
 
-Key performance indicators tracked during benchmark execution:
-
 ### Inference Metrics
-- **TTFT**: Time To First Token measures elapsed time from prompt submission to receiving the first token.
-- **Generation Speed**: Measures average token generation throughput in tokens per second.
-- **Latency**: Measures total round-trip execution duration from initiation to final completion.
+- **TTFT (Time To First Token)**: Measures latency from prompt submission until the first response token is returned.
+- **Generation Speed (TPS)**: Measures average token throughput in tokens per second during stream completion.
+- **Latency**: Total round-trip execution duration from request dispatch to output completion.
 
 ### GPU Telemetry Metrics
-- **Peak VRAM**: Measures maximum video memory consumed by the GPU during benchmark execution.
-- **GPU Utilization**: Measures peak GPU compute core usage percentage recorded during inference.
-- **Power Draw**: Measures maximum GPU electrical power consumption in Watts during active benchmarking.
-- **Temperature**: Measures maximum GPU core temperature recorded during active benchmark execution.
+- **Peak VRAM**: Maximum video RAM allocated by the GPU driver during inference execution.
+- **Peak Power**: Maximum electrical power consumption in Watts recorded during inference.
+- **GPU Utilization**: Percentage of GPU compute core activity during benchmarking.
+- **Temperatures**: Thermal levels recorded across GPU core and VRAM components.
 
 ### Output Metrics
-- **Prompt Tokens**: Counts input tokens in the benchmark prompt payload processed by the model.
-- **Output Tokens**: Counts total completion tokens generated by the model.
-- **Approx Tokens**: Represents the combined total of prompt input tokens and output tokens.
-- **Characters**: Counts total character length of the generated completion text response.
-- **Words**: Counts total word count contained in the generated completion text response.
+- **Characters**: Total count of text characters contained in the model completion output.
+- **Words**: Total word count in the generated response payload.
+- **Approx Tokens**: Combined total estimate of prompt context and completion tokens.
+
+### Future Metrics (Planned)
+- **CPU Usage**: Host CPU utilization during model generation 🚧
+- **RAM Usage**: System host memory consumption 🚧
+- **GPU Clock**: Core engine frequency during inference 🚧
+- **Memory Clock**: VRAM clock frequency 🚧
+- **Fan RPM**: GPU cooling fan rotational speed 🚧
+- **Context Length**: Total active context window size 🚧
+- **Quantization**: Sizing and quantization scheme detection 🚧
 
 ---
 
-## CLI Examples
+## Workflow
 
-Comprehensive command reference for day-to-day operations:
-
-```bash
-# Environment Diagnostics
-aiw doctor
-aiw version
-
-# Configuration Management
-aiw config init
-aiw config show
-aiw config test
-
-# Hardware & Service Monitoring
-aiw monitor gpu
-aiw monitor ollama
-
-# Model Benchmarking
+```text
+Developer
+    │
+    ▼
 aiw benchmark
-aiw benchmark qwen3:8b
-aiw benchmark qwen3:8b hermes3:8b
-aiw benchmark --all
-aiw benchmark --repeat 3 qwen3:8b
+    │
+    ▼
+Interactive Menu
+    │
+    ▼
+Queue
+    │
+    ▼
+Benchmark
+    │
+    ▼
+Collect Metrics
+    │
+    ▼
+Summary
+    │
+    ▼
+Future Reports
 ```
 
 ---
 
 ## Architecture
 
-High-level request dispatch and telemetry pipeline architecture:
-
-```
-CLI
- ↓
-Doctor
- ↓
-Configuration Resolver
- ↓
-Ollama API
- ↓
-GPU Monitor
- ↓
-Benchmark Engine
- ↓
-Summary
+```text
+           +----------------------+
+                aiw CLI
+           +----------------------+
+                     │
+     +---------------+---------------+
+     │                               │
+ Doctor                      Benchmark
+     │                               │
+ Config Resolver              Ollama API
+     │                               │
+ GPU Monitor             Streaming Parser
+     │                               │
+     +---------------+---------------+
+                     │
+               Summary Output
 ```
 
 ---
 
-## Repository Structure
+## Project Structure
 
-Overview of the top-level repository directories and modules:
-
-| Directory | Description |
-| :--- | :--- |
-| `assets/` | Static graphic assets and project badges. |
-| `benchmark/` | Streaming benchmark engine and interactive TUI script handler. |
-| `bin/` | Executable CLI binary launcher (`aiw`). |
-| `config/` | Endpoint configuration resolver and default prompt template files. |
-| `docs/` | Architecture specs, schemas, graphic assets, and release guidelines. |
-| `examples/` | Configuration snippets and output report examples. |
-| `monitor/` | AMD GPU telemetry (`amd-smi`) and Ollama monitoring scripts. |
-| `scripts/` | Modular command handlers and doctor preflight check scripts. |
-| `workspace/` | Terminal workspace layout files and session templates. |
+```text
+ai-terminal-workspace/
+├── assets/                  # Project graphic assets and visual branding
+├── benchmark/               # Benchmark execution engine and interactive TUI script
+│   ├── ollama.sh            # Streaming Ollama API benchmark runner
+│   └── tui.py               # Interactive multi-select model terminal UI
+├── bin/                     # Executable CLI launcher entry point
+│   └── aiw                  # Master CLI command dispatcher script
+├── config/                  # Centralized configuration resolver and prompt templates
+│   ├── prompts/             # Standardized benchmark evaluation prompts
+│   │   └── default.txt      # Default benchmark prompt text
+│   └── resolver.py          # Priority-based configuration resolver
+├── docs/                    # Architecture specifications and documentation
+│   ├── architecture.md      # High-level system architectural overview
+│   ├── benchmark.md         # Detailed benchmark implementation spec
+│   ├── images/              # Visual showcase screenshots and GIF previews
+│   ├── monitoring.md        # Hardware and service telemetry specifications
+│   ├── release-checklist.md # Production release verification procedures
+│   ├── roadmap.md           # Multi-phase project development plan
+│   └── schema.md            # JSON data output schemas
+├── examples/                # Example configurations and output report samples
+├── monitor/                 # Hardware and runtime monitoring scripts
+│   ├── gpu.sh               # AMD GPU hardware telemetry capture via amd-smi
+│   └── ollama.sh            # Ollama server runtime and model state inspector
+├── scripts/                 # Core CLI command dispatchers and doctor preflight checks
+│   ├── doctor/              # Modular dependency and health validation checks
+│   ├── benchmark.sh         # Benchmark command dispatcher
+│   ├── config.sh            # Configuration management dispatcher
+│   ├── doctor.sh            # Doctor command orchestrator
+│   ├── install.sh           # Project installer and symlink setup script
+│   ├── monitor.sh           # Telemetry monitor dispatcher
+│   ├── report.sh            # Report generation dispatcher
+│   └── workspace.sh         # Terminal workspace dispatcher
+├── workspace/               # Terminal workspace layout scripts and session handlers
+├── LICENSE                  # Open source license (MIT)
+└── README.md                # Project README and documentation
+```
 
 ---
 
 ## Roadmap
 
-Development roadmap toward a production-grade workstation toolkit:
-
-```
+```text
 v0.1                  v0.2                     v0.3                  v1.0
 [Doctor]         ──►  [Benchmark History] ──►  [Workspace]      ──►  [Production-Ready]
 [Configuration]       [Model Comparison]       [tmux Integration]    [AI Workstation]
@@ -291,47 +351,51 @@ v0.1                  v0.2                     v0.3                  v1.0
 ### Milestone Breakdown
 
 - **v0.1 (Current Release)**
-  - Doctor environment preflight check
-  - Priority configuration resolver
-  - GPU telemetry monitoring (`amd-smi`)
-  - Ollama runtime monitoring
-  - Streaming benchmark engine
+  - Doctor environment preflight validation
+  - Priority configuration resolver (CLI, Env, TOML, Defaults)
+  - AMD GPU hardware telemetry capture (`amd-smi`)
+  - Ollama service and loaded model monitoring
+  - High-precision streaming benchmark engine
   - Interactive TUI queue runner
 - **v0.2 (Planned)**
-  - Historical benchmark run tracking
-  - Side-by-side model comparison reports
-  - Automated Markdown, CSV, and HTML report export
+  - Historical benchmark run storage and tracking
+  - Side-by-side comparative model performance reports
+  - Markdown, CSV, and HTML report export engines
 - **v0.3 (Planned)**
-  - Terminal workspace builder
+  - Interactive terminal workspace layout builder
   - Native `tmux` session layout integration
-  - Interactive terminal dashboard UI
+  - Real-time terminal dashboard TUI
 - **v1.0 (Target)**
-  - Production-ready AI Workstation Toolkit
+  - Production-ready AI Workstation Toolkit for Linux developers
 
 ---
 
-## Contributing
+## Project Goals
 
-We welcome community contributions! To contribute:
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/my-feature`)
-3. Run `shellcheck` on changed shell scripts
-4. Run `shfmt` to format code
-5. Open a Pull Request
+- **Current Goal**: Build a lightweight, reliable, and zero-dependency local AI benchmarking and monitoring CLI for Linux developers.
+- **Future Goal**: Evolve into a production-ready, open-source AI workstation toolkit for local model deployment, profiling, and management.
 
 ---
 
 ## Release Status
 
-| Metric | Specification |
+| Property | Value |
 | :--- | :--- |
 | **Current Release** | `v0.1.0` |
-| **Status** | Stable |
-| **Notice** | First public release |
+| **Release Status** | Stable |
+| **Target Architecture** | Linux (x86_64 / ROCm) |
 
-> [!NOTE]
-> `v0.1.0` marks the first official public release of AI Terminal Workspace.
+---
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Validate shell scripts with `shellcheck`
+4. Format shell scripts with `shfmt`
+5. Open a Pull Request
 
 ---
 
