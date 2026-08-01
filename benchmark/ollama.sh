@@ -288,23 +288,49 @@ PYEOF
     approx_tokens=$(echo "${bench_result}" | jq -r '.approx_tokens')
 
     # 4. Display benchmark summary for this single run
-    echo "Benchmark"
-    echo "--------------------------"
-    printf "%-18s : %s\n" "Model" "${model}"
-    printf "%-18s : %d ms\n" "TTFT" "${ttft_ms}"
-    printf "%-18s : %d tok/s\n" "Generation Speed" "${gen_speed}"
-    printf "%-18s : %.2f s\n" "Latency" "${latency_s}"
-    printf "%-18s : %d\n" "Characters" "${chars}"
-    printf "%-18s : %d\n" "Words" "${words}"
-    printf "%-18s : %d\n" "Approx Tokens" "${approx_tokens}"
-    echo ""
-    echo "GPU Before"
-    echo "VRAM : ${vram_before}"
-    echo "Power : ${power_before}"
-    echo ""
-    echo "GPU After"
-    echo "VRAM : ${vram_after}"
-    echo "Power : ${power_after}"
+    python3 - "${model}" "${ttft_ms}" "${gen_speed}" "${latency_s}" "${chars}" "${words}" "${approx_tokens}" "${vram_before}" "${power_before}" "${vram_after}" "${power_after}" << 'PYEOF'
+import sys
+
+model, ttft_ms, gen_speed, latency_s, chars, words, approx_tokens, v_bef, p_bef, v_aft, p_aft = sys.argv[1:]
+
+print("Benchmark Results")
+metrics = [
+    ("Model", model),
+    ("TTFT", f"{int(ttft_ms)} ms"),
+    ("Generation Speed", f"{int(gen_speed)} tok/s"),
+    ("Latency", f"{float(latency_s):.2f} s"),
+    ("Characters", f"{int(chars)}"),
+    ("Words", f"{int(words)}"),
+    ("Approx Tokens", f"{int(approx_tokens)}"),
+]
+
+col1_w = 17
+col2_w = max(20, len(model))
+
+print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
+print(f"│ {'Metric':<{col1_w}} │ {'Value':>{col2_w}} │")
+print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
+for name, val in metrics:
+    if name == "Model":
+        print(f"│ {name:<{col1_w}} │ {val:<{col2_w}} │")
+    else:
+        print(f"│ {name:<{col1_w}} │ {val:>{col2_w}} │")
+print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
+print("")
+
+print("GPU Telemetry")
+col_g1 = 17
+col_g2 = max(18, len(v_bef), len(p_bef))
+col_g3 = max(18, len(v_aft), len(p_aft))
+
+print(f"┌{'─' * (col_g1 + 2)}┬{'─' * (col_g2 + 2)}┬{'─' * (col_g3 + 2)}┐")
+print(f"│ {'Metric':<{col_g1}} │ {'Before':>{col_g2}} │ {'After':>{col_g3}} │")
+print(f"├{'─' * (col_g1 + 2)}┼{'─' * (col_g2 + 2)}┼{'─' * (col_g3 + 2)}┤")
+print(f"│ {'VRAM':<{col_g1}} │ {v_bef:>{col_g2}} │ {v_aft:>{col_g3}} │")
+print(f"│ {'Power':<{col_g1}} │ {p_bef:>{col_g2}} │ {p_aft:>{col_g3}} │")
+print(f"└{'─' * (col_g1 + 2)}┴{'─' * (col_g2 + 2)}┴{'─' * (col_g3 + 2)}┘")
+print("")
+PYEOF
 
     # Return metric values for caller
     RESULT_TTFT_MS="${ttft_ms}"
@@ -472,11 +498,22 @@ results = json.loads(sys.argv[1])
 if not results:
     sys.exit(0)
 
-print("")
-print("Summary")
-print("")
-print(f"%-21s %-9s %-9s %s" % ("Model", "TTFT", "TPS", "Latency"))
-print("-" * 48)
+print("Benchmark Summary")
+
+model_w = max(20, max(len(r["model"]) for r in results))
+ttft_w = 10
+tps_w = 10
+lat_w = 10
+
+top_border  = f"┌{'─' * (model_w + 2)}┬{'─' * (ttft_w + 2)}┬{'─' * (tps_w + 2)}┬{'─' * (lat_w + 2)}┐"
+header_line = f"│ {'Model':<{model_w}} │ {'TTFT':>{ttft_w}} │ {'TPS':>{tps_w}} │ {'Latency':>{lat_w}} │"
+mid_border  = f"├{'─' * (model_w + 2)}┼{'─' * (ttft_w + 2)}┼{'─' * (tps_w + 2)}┼{'─' * (lat_w + 2)}┤"
+bot_border  = f"└{'─' * (model_w + 2)}┴{'─' * (ttft_w + 2)}┴{'─' * (tps_w + 2)}┴{'─' * (lat_w + 2)}┘"
+
+print(top_border)
+print(header_line)
+print(mid_border)
+
 for r in results:
     model = r["model"]
     if r.get("error"):
@@ -484,10 +521,13 @@ for r in results:
         tps_str = "Error"
         lat_str = "Error"
     else:
-        ttft_str = f"%.2fs" % (r["ttft_ms"] / 1000.0)
-        tps_str = "%d" % int(r["gen_speed"])
-        lat_str = f"%.1fs" % r["latency_s"]
-    print(f"%-21s %-9s %-9s %s" % (model, ttft_str, tps_str, lat_str))
+        ttft_str = f"{r['ttft_ms'] / 1000.0:.2f}s"
+        tps_str = f"{int(r['gen_speed'])}"
+        lat_str = f"{r['latency_s']:.1f}s"
+    print(f"│ {model:<{model_w}} │ {ttft_str:>{ttft_w}} │ {tps_str:>{tps_w}} │ {lat_str:>{lat_w}} │")
+
+print(bot_border)
+print("")
 PYEOF
 }
 

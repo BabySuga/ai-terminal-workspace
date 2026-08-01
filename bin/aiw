@@ -52,22 +52,31 @@ show_version() {
         shell_name="bash"
     fi
 
-    echo "AI Terminal Workspace"
-    echo ""
-    echo "Version"
-    echo "v${VERSION#v}"
-    echo ""
-    echo "Git Commit"
-    echo "${git_commit}"
-    echo ""
-    echo "Build Date"
-    echo "${git_date}"
-    echo ""
-    echo "Platform"
-    echo "${platform}"
-    echo ""
-    echo "Shell"
-    echo "${shell_name}"
+    python3 - "${VERSION#v}" "${git_commit}" "${git_date}" "${platform}" "${shell_name}" << 'PYEOF'
+import sys
+
+ver, commit, date, plat, sh = sys.argv[1:]
+
+items = [
+    ("Version", f"v{ver}"),
+    ("Git Commit", commit),
+    ("Build Date", date),
+    ("Platform", plat),
+    ("Shell", sh),
+]
+
+col1_w = 17
+col2_w = 20
+
+print("AI Terminal Workspace")
+print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
+print(f"│ {'Property':<{col1_w}} │ {'Value':<{col2_w}} │")
+print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
+for name, val in items:
+    print(f"│ {name:<{col1_w}} │ {val:<{col2_w}} │")
+print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
+print("")
+PYEOF
 }
 
 dispatch() {

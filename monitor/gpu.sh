@@ -67,17 +67,34 @@ collect_metrics() {
 }
 
 print_pretty() {
-    echo "GPU"
-    echo "----------------------------------------"
-    printf "%-11s : %s %s\n" "Utilization" "${UTILIZATION_PERCENT}" "%"
-    printf "%-11s : %s / %s %s\n" "VRAM" "${VRAM_USED_MB}" "${VRAM_TOTAL_MB}" "MB"
-    printf "%-11s : %s %s\n" "Power" "${POWER_W}" "W"
-    printf "%-11s : %s %s\n" "Edge Temp" "${EDGE_TEMP_C}" "°C"
-    printf "%-11s : %s %s\n" "Hotspot" "${HOTSPOT_TEMP_C}" "°C"
-    printf "%-11s : %s %s\n" "Memory Temp" "${MEMORY_TEMP_C}" "°C"
-    printf "%-11s : %s %s\n" "Fan Speed" "${FAN_RPM}" "RPM"
-    printf "%-11s : %s %s\n" "GPU Clock" "${GPU_CLOCK_MHZ}" "MHz"
-    printf "%-11s : %s %s\n" "Mem Clock" "${MEMORY_CLOCK_MHZ}" "MHz"
+    python3 - "$UTILIZATION_PERCENT" "$VRAM_USED_MB" "$VRAM_TOTAL_MB" "$POWER_W" "$EDGE_TEMP_C" "$HOTSPOT_TEMP_C" "$MEMORY_TEMP_C" "$FAN_RPM" "$GPU_CLOCK_MHZ" "$MEMORY_CLOCK_MHZ" << 'PYEOF'
+import sys
+
+util, v_used, v_tot, power, e_temp, h_temp, m_temp, fan, g_clk, m_clk = sys.argv[1:]
+
+metrics = [
+    ("Utilization", f"{util} %"),
+    ("VRAM", f"{v_used} / {v_tot} MB"),
+    ("Power", f"{power} W"),
+    ("Edge Temp", f"{e_temp} °C"),
+    ("Hotspot", f"{h_temp} °C"),
+    ("Memory Temp", f"{m_temp} °C"),
+    ("Fan Speed", f"{fan} RPM"),
+    ("GPU Clock", f"{g_clk} MHz"),
+    ("Mem Clock", f"{m_clk} MHz"),
+]
+
+col1_w = 17
+col2_w = 20
+
+print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
+print(f"│ {'Metric':<{col1_w}} │ {'Value':>{col2_w}} │")
+print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
+for name, val in metrics:
+    print(f"│ {name:<{col1_w}} │ {val:>{col2_w}} │")
+print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
+print("")
+PYEOF
 }
 
 print_json() {

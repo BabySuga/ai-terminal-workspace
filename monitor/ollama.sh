@@ -100,30 +100,61 @@ print_pretty() {
         version_display="N/A"
     fi
 
-    echo "Ollama"
-    echo "----------------------------"
-    echo ""
-    printf "%-14s : %s\n" "Version" "${version_display}"
-    printf "%-14s : %s\n" "Status" "${status_display}"
-    echo ""
-    echo "Loaded Models"
-    echo ""
+    python3 - "${version_display}" "${status_display}" "${LOADED_MODELS}" "${RUNNING_MODELS_JSON}" << 'PYEOF'
+import sys, json
 
-    if [[ "${LOADED_MODELS}" -gt 0 ]]; then
-        jq -r '
-            .[] |
-            "• \(.model_name // "Unknown")",
-            "  Processor    : \(.processor // "N/A")",
-            "  Size         : \(.size // "N/A")",
-            "  Quantization : \(.quantization // "N/A")",
-            "  Context      : \(.context_length // "N/A")\n"
-        ' <<< "${RUNNING_MODELS_JSON}"
-    else
-        echo "No models loaded."
-        echo ""
-    fi
+version, status, loaded_count, models_json = sys.argv[1:]
 
-    printf "%-12s : %s\n" "Total Models" "${LOADED_MODELS}"
+print("Ollama Runtime Status")
+col1_w = 17
+col2_w = 20
+
+print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
+print(f"│ {'Metric':<{col1_w}} │ {'Value':<{col2_w}} │")
+print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
+print(f"│ {'Version':<{col1_w}} │ {version:<{col2_w}} │")
+print(f"│ {'Status':<{col1_w}} │ {status:<{col2_w}} │")
+print(f"│ {'Loaded Models':<{col1_w}} │ {loaded_count:>{col2_w}} │")
+print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
+print("")
+
+models = json.loads(models_json)
+print("Loaded Models")
+
+m_w = 22
+p_w = 12
+s_w = 10
+q_w = 14
+c_w = 10
+
+if models:
+    for m in models:
+        m_w = max(m_w, len(str(m.get("model_name") or "")))
+
+top_b = f"┌{'─' * (m_w + 2)}┬{'─' * (p_w + 2)}┬{'─' * (s_w + 2)}┬{'─' * (q_w + 2)}┬{'─' * (c_w + 2)}┐"
+hdr   = f"│ {'Model':<{m_w}} │ {'Processor':<{p_w}} │ {'Size':<{s_w}} │ {'Quantization':<{q_w}} │ {'Context':>{c_w}} │"
+mid_b = f"├{'─' * (m_w + 2)}┼{'─' * (p_w + 2)}┼{'─' * (s_w + 2)}┼{'─' * (q_w + 2)}┼{'─' * (c_w + 2)}┤"
+bot_b = f"└{'─' * (m_w + 2)}┴{'─' * (p_w + 2)}┴{'─' * (s_w + 2)}┴{'─' * (q_w + 2)}┴{'─' * (c_w + 2)}┘"
+
+print(top_b)
+print(hdr)
+print(mid_b)
+
+if models:
+    for m in models:
+        name = str(m.get("model_name") or "Unknown")
+        proc = str(m.get("processor") or "N/A")
+        size = str(m.get("size") or "N/A")
+        quant = str(m.get("quantization") or "N/A")
+        ctx = str(m.get("context_length") or "N/A")
+        print(f"│ {name:<{m_w}} │ {proc:<{p_w}} │ {size:<{s_w}} │ {quant:<{q_w}} │ {ctx:>{c_w}} │")
+else:
+    none_str = "(No models loaded)"
+    print(f"│ {none_str:<{m_w}} │ {'-':<{p_w}} │ {'-':<{s_w}} │ {'-':<{q_w}} │ {'-':>{c_w}} │")
+
+print(bot_b)
+print("")
+PYEOF
 }
 
 print_json() {

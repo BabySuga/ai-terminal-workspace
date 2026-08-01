@@ -99,24 +99,41 @@ def cmd_init():
 def cmd_show(cli_endpoint=None):
     resolved_endpoint = get_resolved_endpoint(cli_endpoint)
     exists_str = "Exists" if CONFIG_PATH.is_file() else "Not Found"
+    cfg_file_val = f"{CONFIG_PATH} ({exists_str})"
 
-    print("Configuration")
-    print("----------------------------")
-    print(f"Config File  : {CONFIG_PATH} ({exists_str})")
+    col1_w = 17
+    col2_w = max(40, len(cfg_file_val), len(resolved_endpoint))
+
+    print("Configuration Summary")
+    print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
+    print(f"│ {'Property':<{col1_w}} │ {'Value':<{col2_w}} │")
+    print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
+    print(f"│ {'Config File':<{col1_w}} │ {cfg_file_val:<{col2_w}} │")
+    print(f"│ {'Ollama Endpoint':<{col1_w}} │ {resolved_endpoint:<{col2_w}} │")
+    print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
     print("")
-    print("Resolved Configuration:")
-    print(f"  Ollama Endpoint : {resolved_endpoint}")
-    print("")
-    print("Config File Contents:")
+
+    print("Config File Contents")
+    lines = []
     if CONFIG_PATH.is_file():
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 content = f.read().strip()
-                print(content if content else "(Empty file)")
+                if content:
+                    lines = content.splitlines()
+                else:
+                    lines = ["(Empty file)"]
         except Exception as e:
-            print(f"Error reading file: {e}")
+            lines = [f"Error reading file: {e}"]
     else:
-        print("(No config file found, using defaults)")
+        lines = ["(No config file found, using defaults)"]
+
+    max_line_w = max(40, max(len(l) for l in lines)) if lines else 40
+    print(f"┌{'─' * (max_line_w + 2)}┐")
+    for l in lines:
+        print(f"│ {l:<{max_line_w}} │")
+    print(f"└{'─' * (max_line_w + 2)}┘")
+    print("")
 
 def cmd_test(cli_endpoint=None):
     endpoint = get_resolved_endpoint(cli_endpoint)
@@ -148,12 +165,27 @@ def cmd_test(cli_endpoint=None):
             model_count = "N/A"
 
     print("Configuration Test")
-    print("----------------------------")
-    print(f"Endpoint              : {endpoint}")
-    print(f"Reachability          : {reachability}")
-    print(f"Ollama Version        : {version}")
-    print(f"Installed Model Count : {model_count}")
-    print(f"Request Latency       : {latency_str}")
+    col1_w = 23
+    col2_w = max(30, len(endpoint))
+
+    params = [
+        ("Endpoint", endpoint),
+        ("Reachability", reachability),
+        ("Ollama Version", version),
+        ("Installed Model Count", model_count),
+        ("Request Latency", latency_str),
+    ]
+
+    print(f"┌{'─' * (col1_w + 2)}┬{'─' * (col2_w + 2)}┐")
+    print(f"│ {'Parameter':<{col1_w}} │ {'Value':<{col2_w}} │")
+    print(f"├{'─' * (col1_w + 2)}┼{'─' * (col2_w + 2)}┤")
+    for name, val in params:
+        if name in ("Installed Model Count", "Request Latency"):
+            print(f"│ {name:<{col1_w}} │ {val:>{col2_w}} │")
+        else:
+            print(f"│ {name:<{col1_w}} │ {val:<{col2_w}} │")
+    print(f"└{'─' * (col1_w + 2)}┴{'─' * (col2_w + 2)}┘")
+    print("")
 
 def cmd_set(args):
     if len(args) < 2:
