@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Module: monitor/ollama.sh - Local Ollama runtime monitoring
 
-set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+RESOLVER="${PROJECT_ROOT}/config/resolver.py"
+RESOLVED_ENDPOINT=""
 
 OLLAMA_VERSION=""
 SERVER_STATUS="stopped"
@@ -23,7 +26,7 @@ check_dependencies() {
 }
 
 collect_metrics() {
-    local host="${OLLAMA_HOST:-http://localhost:11434}"
+    local host="${RESOLVED_ENDPOINT}"
     local api_version_raw=""
 
     if command -v curl >/dev/null 2>&1; then
@@ -141,6 +144,7 @@ print_json() {
 
 main() {
     local json_output=false
+    local cli_endpoint=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -148,8 +152,16 @@ main() {
                 json_output=true
                 shift
                 ;;
+            --endpoint)
+                cli_endpoint="$2"
+                shift 2
+                ;;
+            --endpoint=*)
+                cli_endpoint="${1#*=}"
+                shift
+                ;;
             -h|--help)
-                echo "Usage: monitor/ollama.sh [--json]"
+                echo "Usage: monitor/ollama.sh [--json] [--endpoint URL]"
                 exit 0
                 ;;
             *)
@@ -158,6 +170,12 @@ main() {
                 ;;
         esac
     done
+
+    if [[ -f "${RESOLVER}" ]] && command -v python3 >/dev/null 2>&1; then
+        RESOLVED_ENDPOINT=$(python3 "${RESOLVER}" get-endpoint ${cli_endpoint:+--endpoint "${cli_endpoint}"})
+    else
+        RESOLVED_ENDPOINT="${cli_endpoint:-${AIW_OLLAMA_ENDPOINT:-${OLLAMA_HOST:-http://127.0.0.1:11434}}}"
+    fi
 
     if ! check_dependencies; then
         exit 1

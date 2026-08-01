@@ -8,6 +8,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MONITOR_GPU="${PROJECT_ROOT}/monitor/gpu.sh"
 PROMPT_FILE="${PROJECT_ROOT}/config/prompts/default.txt"
 TUI_SCRIPT="${SCRIPT_DIR}/tui.py"
+RESOLVER="${PROJECT_ROOT}/config/resolver.py"
+RESOLVED_ENDPOINT=""
 
 show_help() {
     cat << 'EOF'
@@ -26,6 +28,7 @@ Examples:
 Options:
   -a, --all        Benchmark all installed Ollama models
   -r, --repeat N   Repeat benchmark queue N times
+  --endpoint URL   Override Ollama endpoint URL
   -h, --help       Print usage information
 EOF
 }
@@ -92,10 +95,11 @@ parse_power() {
 }
 
 get_installed_models() {
-    python3 -c '
+    python3 - "${RESOLVED_ENDPOINT}" << 'PYEOF'
 import json, urllib.request, subprocess, sys
+endpoint = sys.argv[1]
 try:
-    req = urllib.request.Request("http://localhost:11434/api/tags")
+    req = urllib.request.Request(f"{endpoint}/api/tags")
     with urllib.request.urlopen(req, timeout=5) as resp:
         data = json.loads(resp.read().decode("utf-8"))
         models = [m["name"] for m in data.get("models", [])]
@@ -118,7 +122,7 @@ try:
         sys.exit(0)
 except Exception:
     pass
-'
+PYEOF
 }
 
 run_single_benchmark() {
@@ -147,12 +151,13 @@ run_single_benchmark() {
 
     # 2. Run streaming benchmark via python HTTP streaming client
     local bench_result
-    bench_result=$(python3 - "${model}" "${prompt}" << 'PYEOF'
+    bench_result=$(python3 - "${model}" "${prompt}" "${RESOLVED_ENDPOINT}" << 'PYEOF'
 import sys, json, time, urllib.request, urllib.error, socket
 
 model = sys.argv[1]
 prompt = sys.argv[2]
-url = "http://localhost:11434/api/generate"
+endpoint = sys.argv[3]
+url = f"{endpoint}/api/generate"
 
 payload = json.dumps({
     "model": model,
@@ -239,7 +244,8 @@ except urllib.error.URLError as e:
     if isinstance(e.reason, socket.timeout):
         print(json.dumps({"error": "Benchmark request timed out."}))
     else:
-        print(json.dumps({"error": "Ollama service is stopped or unreachable at http://localhost:11434."}))
+        print(json.dumps({"error": f"Ollama service is stopped or unreachable at {endpoint}."}))
+    sys.exit(0)
     sys.exit(0)
 
 except (socket.timeout, TimeoutError):
@@ -314,6 +320,7 @@ main() {
 
     local run_all=false
     local repeat_count=1
+    local cli_endpoint=""
     local models=()
 
     while [[ $# -gt 0 ]]; do
@@ -338,6 +345,18 @@ main() {
                 repeat_count="${1#*=}"
                 shift
                 ;;
+            --endpoint)
+                if [[ $# -lt 2 ]]; then
+                    echo "Error: Option '$1' requires an argument." >&2
+                    exit 1
+                fi
+                cli_endpoint="$2"
+                shift 2
+                ;;
+            --endpoint=*)
+                cli_endpoint="${1#*=}"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
                 show_help
@@ -350,6 +369,12 @@ main() {
         esac
     done
 
+    if [[ -f "${RESOLVER}" ]] && command -v python3 >/dev/null 2>&1; then
+        RESOLVED_ENDPOINT=$(python3 "${RESOLVER}" get-endpoint ${cli_endpoint:+--endpoint "${cli_endpoint}"})
+    else
+        RESOLVED_ENDPOINT="${cli_endpoint:-${AIW_OLLAMA_ENDPOINT:-${OLLAMA_HOST:-http://127.0.0.1:11434}}}"
+    fi
+
     # Build initial list of models
     if [[ "${run_all}" == "true" ]]; then
         mapfile -t models < <(get_installed_models)
@@ -360,7 +385,7 @@ main() {
     elif [[ ${#models[@]} -eq 0 ]]; then
         # Launch Interactive TUI
         local tui_res
-        tui_res=$(python3 "${TUI_SCRIPT}")
+        tui_res=$(python3 "${TUI_SCRIPT}" --endpoint "${RESOLVED_ENDPOINT}")
         if [[ -z "${tui_res}" ]] || [[ "${tui_res}" == "[]" ]]; then
             exit 0
         fi

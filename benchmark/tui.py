@@ -9,10 +9,32 @@ import curses
 import urllib.request
 import subprocess
 
-def get_ollama_models():
-    """Retrieve installed Ollama models via API or CLI."""
+def resolve_endpoint_arg():
+    cli_ep = None
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--endpoint" and i + 1 < len(args):
+            cli_ep = args[i + 1]
+            break
+        elif args[i].startswith("--endpoint="):
+            cli_ep = args[i].split("=", 1)[1]
+            break
+        i += 1
+
     try:
-        req = urllib.request.Request("http://localhost:11434/api/tags")
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from config.resolver import get_resolved_endpoint
+        return get_resolved_endpoint(cli_ep)
+    except Exception:
+        return cli_ep or "http://127.0.0.1:11434"
+
+def get_ollama_models(endpoint=None):
+    """Retrieve installed Ollama models via API or CLI."""
+    endpoint = endpoint or resolve_endpoint_arg()
+    try:
+        req = urllib.request.Request(f"{endpoint}/api/tags")
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             models = [m["name"] for m in data.get("models", [])]

@@ -19,6 +19,7 @@ Available Commands:
   help        Print usage information
   version     Print project version
   check       Execute environment preflight checks
+  config      Manage workspace and module configuration
   monitor     Monitor system telemetry (e.g., gpu)
   benchmark   Run LLM performance benchmarks
   report      Generate execution & telemetry reports
@@ -50,7 +51,7 @@ dispatch() {
         version|-v|--version)
             show_version
             ;;
-        check|monitor|benchmark|report|workspace)
+        check|config|monitor|benchmark|report|workspace)
             local script="${SCRIPTS_DIR}/${cmd}.sh"
             if [[ -x "${script}" ]]; then
                 exec "${script}" "$@"
