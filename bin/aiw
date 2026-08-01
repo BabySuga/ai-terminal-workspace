@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# AI Terminal Workspace CLI Dispatcher
+
+set -euo pipefail
+
+VERSION="0.1.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SCRIPTS_DIR="${PROJECT_ROOT}/scripts"
+
+show_help() {
+    cat << 'EOF'
+aiw - AI Terminal Workspace CLI
+
+Usage:
+  aiw <command> [arguments]
+
+Available Commands:
+  help        Print usage information
+  version     Print project version
+  check       Execute environment preflight checks
+  monitor     Monitor system telemetry
+  benchmark   Run LLM performance benchmarks
+  report      Generate execution & telemetry reports
+  workspace   Manage AI terminal workspace sessions
+
+Options:
+  -h, --help     Print usage information
+  -v, --version  Print project version
+EOF
+}
+
+show_version() {
+    echo "aiw version ${VERSION}"
+}
+
+dispatch() {
+    if [[ $# -eq 0 ]]; then
+        show_help
+        exit 0
+    fi
+
+    local cmd="$1"
+    shift
+
+    case "${cmd}" in
+        help|-h|--help)
+            show_help
+            ;;
+        version|-v|--version)
+            show_version
+            ;;
+        check|monitor|benchmark|report|workspace)
+            local script="${SCRIPTS_DIR}/${cmd}.sh"
+            if [[ -x "${script}" ]]; then
+                exec "${script}" "$@"
+            elif [[ -f "${script}" ]]; then
+                exec bash "${script}" "$@"
+            else
+                echo "Error: Command script '${script}' not found." >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Error: Unknown command '${cmd}'" >&2
+            echo "" >&2
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+dispatch "$@"
