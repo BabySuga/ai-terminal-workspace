@@ -19,7 +19,7 @@ Available Commands:
   help        Print usage information
   version     Print project version
   check       Execute environment preflight checks
-  monitor     Monitor system telemetry
+  monitor     Monitor system telemetry (e.g., gpu)
   benchmark   Run LLM performance benchmarks
   report      Generate execution & telemetry reports
   workspace   Manage AI terminal workspace sessions
