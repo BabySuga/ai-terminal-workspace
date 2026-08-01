@@ -4,7 +4,8 @@
 set -euo pipefail
 
 VERSION="0.1.0"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_PATH}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPTS_DIR="${PROJECT_ROOT}/scripts"
 
@@ -32,7 +33,41 @@ EOF
 }
 
 show_version() {
-    echo "aiw version ${VERSION}"
+    local git_commit git_date platform shell_name
+
+    git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short HEAD 2>/dev/null || true)"
+    if [[ -z "${git_commit}" ]]; then
+        git_commit="unknown"
+    fi
+
+    git_date="$(git -C "${PROJECT_ROOT}" log -1 --format="%cs" 2>/dev/null || true)"
+    if [[ -z "${git_date}" ]]; then
+        git_date="unknown"
+    fi
+
+    platform="$(uname -s 2>/dev/null || echo "unknown")"
+
+    shell_name="$(basename "${SHELL:-bash}" 2>/dev/null || echo "bash")"
+    if [[ -z "${shell_name}" ]]; then
+        shell_name="bash"
+    fi
+
+    echo "AI Terminal Workspace"
+    echo ""
+    echo "Version"
+    echo "v${VERSION#v}"
+    echo ""
+    echo "Git Commit"
+    echo "${git_commit}"
+    echo ""
+    echo "Build Date"
+    echo "${git_date}"
+    echo ""
+    echo "Platform"
+    echo "${platform}"
+    echo ""
+    echo "Shell"
+    echo "${shell_name}"
 }
 
 dispatch() {
