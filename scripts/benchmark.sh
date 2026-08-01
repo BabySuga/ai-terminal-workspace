@@ -12,35 +12,39 @@ show_help() {
 aiw benchmark - LLM Performance Benchmarking
 
 Usage:
-  aiw benchmark <model>
+  aiw benchmark [options] [model ...]
 
-Example:
+Examples:
+  aiw benchmark
   aiw benchmark qwen3:8b
+  aiw benchmark qwen3:8b hermes3:8b
+  aiw benchmark --all
+  aiw benchmark --repeat 3 qwen3:8b
 
 Options:
-  -h, --help  Print usage information
+  -a, --all        Benchmark all installed Ollama models
+  -r, --repeat N   Repeat benchmark queue N times
+  -h, --help       Print usage information
 EOF
 }
 
-if [[ $# -eq 0 ]]; then
-    show_help
-    exit 0
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        -h|--help|help)
+            show_help
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
 fi
 
-case "$1" in
-    -h|--help|help)
-        show_help
-        exit 0
-        ;;
-    *)
-        if [[ -x "${BENCHMARK_DIR}/ollama.sh" ]]; then
-            exec "${BENCHMARK_DIR}/ollama.sh" "$@"
-        elif [[ -f "${BENCHMARK_DIR}/ollama.sh" ]]; then
-            exec bash "${BENCHMARK_DIR}/ollama.sh" "$@"
-        else
-            echo "Error: Benchmark runner script '${BENCHMARK_DIR}/ollama.sh' not found." >&2
-            exit 1
-        fi
-        ;;
-esac
+if [[ -x "${BENCHMARK_DIR}/ollama.sh" ]]; then
+    exec "${BENCHMARK_DIR}/ollama.sh" "$@"
+elif [[ -f "${BENCHMARK_DIR}/ollama.sh" ]]; then
+    exec bash "${BENCHMARK_DIR}/ollama.sh" "$@"
+else
+    echo "Error: Benchmark runner script '${BENCHMARK_DIR}/ollama.sh' not found." >&2
+    exit 1
+fi
 

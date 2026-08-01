@@ -7,19 +7,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MONITOR_GPU="${PROJECT_ROOT}/monitor/gpu.sh"
 PROMPT_FILE="${PROJECT_ROOT}/config/prompts/default.txt"
+TUI_SCRIPT="${SCRIPT_DIR}/tui.py"
 
 show_help() {
     cat << 'EOF'
 aiw benchmark - LLM Performance Benchmarking
 
 Usage:
-  aiw benchmark <model>
+  aiw benchmark [options] [model ...]
 
-Example:
+Examples:
+  aiw benchmark
   aiw benchmark qwen3:8b
+  aiw benchmark qwen3:8b hermes3:8b
+  aiw benchmark --all
+  aiw benchmark --repeat 3 qwen3:8b
 
 Options:
-  -h, --help  Print usage information
+  -a, --all        Benchmark all installed Ollama models
+  -r, --repeat N   Repeat benchmark queue N times
+  -h, --help       Print usage information
 EOF
 }
 
@@ -84,30 +91,42 @@ parse_power() {
     fi
 }
 
-main() {
-    if [[ $# -eq 0 ]]; then
-        show_help
-        exit 0
-    fi
+get_installed_models() {
+    python3 -c '
+import json, urllib.request, subprocess, sys
+try:
+    req = urllib.request.Request("http://localhost:11434/api/tags")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        models = [m["name"] for m in data.get("models", [])]
+        if models:
+            print("\n".join(models))
+            sys.exit(0)
+except Exception:
+    pass
 
-    case "$1" in
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        *)
-            ;;
-    esac
+try:
+    out = subprocess.check_output(["ollama", "list"], text=True, stderr=subprocess.DEVNULL)
+    lines = out.strip().split("\n")
+    models = []
+    for line in lines[1:]:
+        parts = line.split()
+        if parts:
+            models.append(parts[0])
+    if models:
+        print("\n".join(models))
+        sys.exit(0)
+except Exception:
+    pass
+'
+}
 
+run_single_benchmark() {
     local model="$1"
-
-    if ! check_dependencies; then
-        exit 1
-    fi
 
     if [[ ! -f "${PROMPT_FILE}" ]]; then
         echo "Error: Benchmark prompt file '${PROMPT_FILE}' not found." >&2
-        exit 1
+        return 1
     fi
 
     local prompt
@@ -115,7 +134,7 @@ main() {
 
     if [[ -z "${prompt}" ]]; then
         echo "Error: Benchmark prompt file '${PROMPT_FILE}' is empty." >&2
-        exit 1
+        return 1
     fi
 
     # 1. GPU metrics BEFORE benchmark
@@ -233,17 +252,16 @@ except Exception as e:
 PYEOF
 ) || true
 
-    # Check if python output contains error or empty
     if [[ -z "${bench_result}" ]]; then
-        echo "Error: Failed to execute benchmark." >&2
-        exit 1
+        echo "Error: Failed to execute benchmark for ${model}." >&2
+        return 1
     fi
 
     if echo "${bench_result}" | jq -e '.error' >/dev/null 2>&1; then
         local err_msg
         err_msg=$(echo "${bench_result}" | jq -r '.error')
         echo "Error: ${err_msg}" >&2
-        exit 1
+        return 1
     fi
 
     # 3. GPU metrics AFTER benchmark
@@ -263,7 +281,7 @@ PYEOF
     words=$(echo "${bench_result}" | jq -r '.words')
     approx_tokens=$(echo "${bench_result}" | jq -r '.approx_tokens')
 
-    # 4. Display benchmark summary
+    # 4. Display benchmark summary for this single run
     echo "Benchmark"
     echo "--------------------------"
     printf "%-18s : %s\n" "Model" "${model}"
@@ -281,6 +299,171 @@ PYEOF
     echo "GPU After"
     echo "VRAM : ${vram_after}"
     echo "Power : ${power_after}"
+
+    # Return metric values for caller
+    RESULT_TTFT_MS="${ttft_ms}"
+    RESULT_GEN_SPEED="${gen_speed}"
+    RESULT_LATENCY_S="${latency_s}"
+    return 0
+}
+
+main() {
+    if ! check_dependencies; then
+        exit 1
+    fi
+
+    local run_all=false
+    local repeat_count=1
+    local models=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -a|--all)
+                run_all=true
+                shift
+                ;;
+            -r|--repeat)
+                if [[ $# -lt 2 ]]; then
+                    echo "Error: Option '$1' requires an argument." >&2
+                    exit 1
+                fi
+                repeat_count="$2"
+                shift 2
+                ;;
+            --repeat=*)
+                repeat_count="${1#*=}"
+                shift
+                ;;
+            -*)
+                echo "Error: Unknown option '$1'" >&2
+                show_help
+                exit 1
+                ;;
+            *)
+                models+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Build initial list of models
+    if [[ "${run_all}" == "true" ]]; then
+        mapfile -t models < <(get_installed_models)
+        if [[ ${#models[@]} -eq 0 ]]; then
+            echo "Error: No installed Ollama models found." >&2
+            exit 1
+        fi
+    elif [[ ${#models[@]} -eq 0 ]]; then
+        # Launch Interactive TUI
+        local tui_res
+        tui_res=$(python3 "${TUI_SCRIPT}")
+        if [[ -z "${tui_res}" ]] || [[ "${tui_res}" == "[]" ]]; then
+            exit 0
+        fi
+        mapfile -t models < <(python3 -c "import sys, json; print('\n'.join(json.loads(sys.argv[1])))" "${tui_res}")
+        if [[ ${#models[@]} -eq 0 ]]; then
+            exit 0
+        fi
+    fi
+
+    # Build queue considering repeat_count
+    local queue=()
+    for (( r=0; r<repeat_count; r++ )); do
+        for m in "${models[@]}"; do
+            queue+=("$m")
+        done
+    done
+
+    local total_models=${#queue[@]}
+    if [[ ${total_models} -eq 0 ]]; then
+        exit 0
+    fi
+
+    local summary_json="[]"
+
+    for (( i=0; i<total_models; i++ )); do
+        local model="${queue[$i]}"
+        local current=$((i + 1))
+
+        echo "Queue"
+        echo "${current}/${total_models}"
+        echo ""
+        echo "Benchmarking"
+        echo "${model}"
+        echo "↓"
+
+        RESULT_TTFT_MS=""
+        RESULT_GEN_SPEED=""
+        RESULT_LATENCY_S=""
+
+        if run_single_benchmark "${model}"; then
+            summary_json=$(python3 - "${summary_json}" "${model}" "${RESULT_TTFT_MS}" "${RESULT_GEN_SPEED}" "${RESULT_LATENCY_S}" << 'PYEOF'
+import sys, json
+results = json.loads(sys.argv[1])
+model = sys.argv[2]
+ttft_ms = float(sys.argv[3])
+gen_speed = float(sys.argv[4])
+latency_s = float(sys.argv[5])
+results.append({
+    "model": model,
+    "ttft_ms": ttft_ms,
+    "gen_speed": gen_speed,
+    "latency_s": latency_s
+})
+print(json.dumps(results))
+PYEOF
+)
+        else
+            summary_json=$(python3 - "${summary_json}" "${model}" << 'PYEOF'
+import sys, json
+results = json.loads(sys.argv[1])
+model = sys.argv[2]
+results.append({
+    "model": model,
+    "error": True
+})
+print(json.dumps(results))
+PYEOF
+)
+        fi
+
+        echo ""
+        echo "Completed"
+        if [[ ${current} -lt ${total_models} ]]; then
+            echo "↓"
+            echo ""
+        fi
+    done
+
+    # Print concise summary table
+    python3 - "${summary_json}" << 'PYEOF'
+import sys, json
+
+results = json.loads(sys.argv[1])
+if not results:
+    sys.exit(0)
+
+print("")
+print("Summary")
+print("")
+print(f"%-21s %-9s %-9s %s" % ("Model", "TTFT", "TPS", "Latency"))
+print("-" * 48)
+for r in results:
+    model = r["model"]
+    if r.get("error"):
+        ttft_str = "Error"
+        tps_str = "Error"
+        lat_str = "Error"
+    else:
+        ttft_str = f"%.2fs" % (r["ttft_ms"] / 1000.0)
+        tps_str = "%d" % int(r["gen_speed"])
+        lat_str = f"%.1fs" % r["latency_s"]
+    print(f"%-21s %-9s %-9s %s" % (model, ttft_str, tps_str, lat_str))
+PYEOF
 }
 
 main "$@"
