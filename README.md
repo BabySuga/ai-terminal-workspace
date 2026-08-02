@@ -2,12 +2,14 @@
 
 Monitor • Benchmark • Profile Local LLM Workstations
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](https://github.com/BabySuga/ai-terminal-workspace)
+[![Latest Release](https://img.shields.io/github/v/release/BabySuga/ai-terminal-workspace)](https://github.com/BabySuga/ai-terminal-workspace/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Linux](https://img.shields.io/badge/platform-Linux-orange.svg)]()
 [![ROCm](https://img.shields.io/badge/backend-ROCm-purple.svg)]()
 [![Bash](https://img.shields.io/badge/shell-Bash-lightgrey.svg)]()
-[![Status](https://img.shields.io/badge/status-v0.1.0--stable-brightgreen.svg)]()
+[![Status](https://img.shields.io/badge/status-v0.1.1--stable-brightgreen.svg)](https://github.com/BabySuga/ai-terminal-workspace/releases/latest)
+
+> Current Release: **v0.1.1** · Status: **Latest** · [Latest Release Page](https://github.com/BabySuga/ai-terminal-workspace/releases/latest)
 
 ---
 
@@ -399,7 +401,7 @@ v0.1                  v0.2                     v0.3                  v1.0
 
 | Property | Value |
 | :--- | :--- |
-| **Current Release** | `v0.1.0` |
+| **Current Release** | `v0.1.1` |
 | **Release Status** | Stable |
 | **Target Architecture** | Linux (x86_64 / ROCm) |
 
