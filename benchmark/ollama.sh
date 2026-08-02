@@ -419,13 +419,13 @@ PYEOF
 
     # Parse metrics
     local start_mode ttft_ms gen_speed latency_s chars words approx_tokens
-    start_mode=$(echo "${bench_result}" | jq -r '.start_mode')
-    ttft_ms=$(echo "${bench_result}" | jq -r '.ttft_ms')
-    gen_speed=$(echo "${bench_result}" | jq -r '.gen_speed_tok_s')
-    latency_s=$(echo "${bench_result}" | jq -r '.latency_s')
-    chars=$(echo "${bench_result}" | jq -r '.chars')
-    words=$(echo "${bench_result}" | jq -r '.words')
-    approx_tokens=$(echo "${bench_result}" | jq -r '.approx_tokens')
+    start_mode=$(echo "${bench_result}" | jq -r '.start_mode // "Cold"')
+    ttft_ms=$(echo "${bench_result}" | jq -r '.ttft_ms // 0')
+    gen_speed=$(echo "${bench_result}" | jq -r '.gen_speed_tok_s // 0')
+    latency_s=$(echo "${bench_result}" | jq -r '.latency_s // 0')
+    chars=$(echo "${bench_result}" | jq -r '.chars // 0')
+    words=$(echo "${bench_result}" | jq -r '.words // 0')
+    approx_tokens=$(echo "${bench_result}" | jq -r '.approx_tokens // 0')
 
     # 4. Display benchmark summary for this single run
     # shellcheck source=lib/table.sh
@@ -444,12 +444,12 @@ PYEOF
     local vals=(
         "${model}"
         "${start_mode}"
-        "$(printf "%.0f ms" "${ttft_ms}")"
-        "$(printf "%.0f tok/s" "${gen_speed}")"
-        "$(printf "%.2f s" "${latency_s}")"
-        "$(printf "%.0f" "${chars}")"
-        "$(printf "%.0f" "${words}")"
-        "$(printf "%.0f" "${approx_tokens}")"
+        "$(printf "%.0f ms" "${ttft_ms}" 2>/dev/null || echo "${ttft_ms} ms")"
+        "$(printf "%.0f tok/s" "${gen_speed}" 2>/dev/null || echo "${gen_speed} tok/s")"
+        "$(printf "%.2f s" "${latency_s}" 2>/dev/null || echo "${latency_s} s")"
+        "$(printf "%.0f" "${chars}" 2>/dev/null || echo "${chars}")"
+        "$(printf "%.0f" "${words}" 2>/dev/null || echo "${words}")"
+        "$(printf "%.0f" "${approx_tokens}" 2>/dev/null || echo "${approx_tokens}")"
     )
 
     print_kv_table --title "Benchmark Results" --headers "Metric" "Value" --align2 R --min-width1 17 --min-width2 20 metrics vals
@@ -609,15 +609,19 @@ main() {
 import sys, json
 results = json.loads(sys.argv[1])
 model = sys.argv[2]
-ttft_ms = float(sys.argv[3])
-gen_speed = float(sys.argv[4])
-latency_s = float(sys.argv[5])
+
+def to_float(v):
+    try:
+        return float(v)
+    except Exception:
+        return 0.0
+
 results.append({
     "model": model,
     "status": "success",
-    "ttft_ms": ttft_ms,
-    "gen_speed": gen_speed,
-    "latency_s": latency_s
+    "ttft_ms": to_float(sys.argv[3]),
+    "gen_speed": to_float(sys.argv[4]),
+    "latency_s": to_float(sys.argv[5])
 })
 print(json.dumps(results))
 PYEOF

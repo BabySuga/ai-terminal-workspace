@@ -243,49 +243,58 @@ def main():
     cli_ep = parse_args()
     endpoint = resolve_endpoint(cli_ep)
 
-    res = []
-    fin = None
-    fout = None
+    saved_stdout_fd = None
+    saved_stdin_fd = None
+    tty_out_fd = None
+    tty_in_fd = None
 
-    try:
-        if sys.stdin.isatty() and sys.stdout.isatty():
-            res = curses.wrapper(lambda stdscr: run_tui(stdscr, endpoint))
-        else:
-            try:
-                fin = open("/dev/tty", "r")
-                fout = open("/dev/tty", "w")
-            except Exception as e:
-                print_failure_ux(f"No controlling terminal (/dev/tty) available ({e}).")
-                sys.exit(1)
+    is_pipe = not sys.stdout.isatty()
 
-            try:
-                term_name = os.environ.get("TERM", "xterm-256color")
-                term = curses.newterm(term_name, fout, fin)
-                curses.set_term(term)
-                stdscr = curses.initscr()
-            except Exception as e:
-                print_failure_ux(f"TUI initialization error ({e}).")
-                sys.exit(1)
+    if is_pipe:
+        try:
+            saved_stdout_fd = os.dup(1)
+            if not sys.stdin.isatty():
+                saved_stdin_fd = os.dup(0)
 
-            try:
-                res = run_tui(stdscr, endpoint)
-            finally:
+            tty_out_fd = os.open("/dev/tty", os.O_WRONLY)
+            tty_in_fd = os.open("/dev/tty", os.O_RDONLY)
+
+            os.dup2(tty_out_fd, 1)
+            os.dup2(tty_in_fd, 0)
+        except Exception as e:
+            print_failure_ux(f"No controlling terminal (/dev/tty) available ({e}).")
+            sys.exit(1)
+        finally:
+            if tty_out_fd is not None:
                 try:
-                    curses.nocbreak()
-                    if 'stdscr' in locals():
-                        stdscr.keypad(False)
-                    curses.echo()
-                    curses.endwin()
+                    os.close(tty_out_fd)
                 except Exception:
                     pass
+            if tty_in_fd is not None:
+                try:
+                    os.close(tty_in_fd)
+                except Exception:
+                    pass
+
+    res = []
+    try:
+        res = curses.wrapper(lambda stdscr: run_tui(stdscr, endpoint))
     except Exception as e:
         print_failure_ux(f"Unexpected TUI error ({e}).")
         sys.exit(1)
     finally:
-        if fin and not fin.closed:
-            fin.close()
-        if fout and not fout.closed:
-            fout.close()
+        if saved_stdout_fd is not None:
+            try:
+                os.dup2(saved_stdout_fd, 1)
+                os.close(saved_stdout_fd)
+            except Exception:
+                pass
+        if saved_stdin_fd is not None:
+            try:
+                os.dup2(saved_stdin_fd, 0)
+                os.close(saved_stdin_fd)
+            except Exception:
+                pass
 
     print(json.dumps(res))
 
