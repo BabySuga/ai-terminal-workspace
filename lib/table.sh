@@ -25,6 +25,46 @@ else
     COLOR_RESET=""
 fi
 
+# Helper to strip ANSI escape sequences for printable width calculation
+strip_ansi() {
+    local str="$1"
+    local esc=$'\033'
+    local pattern="${esc}\[[0-9;]*[a-zA-Z]"
+    while [[ "${str}" =~ ${pattern} ]]; do
+        str="${str//${BASH_REMATCH[0]}/}"
+    done
+    echo "${str}"
+}
+
+# Apply color to status indicators
+colorize_val() {
+    local val="$1"
+    if ! table_supports_color; then
+        echo "${val}"
+        return
+    fi
+
+    case "${val}" in
+        "READY"|"Running"|"Reachable"|"✓ OK"|"✓")
+            echo "${COLOR_GREEN}${val}${COLOR_RESET}"
+            ;;
+        "Failed"|"Stopped"|"Unreachable"|"NOT READY"|"✗ FAIL"|"Error")
+            echo "${COLOR_RED}${val}${COLOR_RESET}"
+            ;;
+        "WARNING"|"Warning"|"WARN"|"Warn"|"Warnings")
+            echo "${COLOR_YELLOW}${val}${COLOR_RESET}"
+            ;;
+        *)
+            echo "${val}"
+            ;;
+    esac
+}
+
+colorize_line() {
+    local line="$1"
+    echo "${line}"
+}
+
 # Print title line
 print_title() {
     if [[ -n "${1:-}" ]]; then
@@ -43,28 +83,6 @@ repeat_char() {
     local pad
     printf -v pad '%*s' "$count" ''
     echo "${pad// /$char}"
-}
-
-# Apply color to status indicators without affecting character spacing
-colorize_line() {
-    local line="$1"
-    if ! table_supports_color; then
-        echo "${line}"
-        return
-    fi
-
-    line="${line//✓ OK/${COLOR_GREEN}✓ OK${COLOR_RESET}}"
-    line="${line//✓/${COLOR_GREEN}✓${COLOR_RESET}}"
-    line="${line// ✗ FAIL / ${COLOR_RED}✗ FAIL${COLOR_RESET} }"
-    line="${line//│ ✗ FAIL /│ ${COLOR_RED}✗ FAIL${COLOR_RESET} }"
-    line="${line// READY / ${COLOR_GREEN}READY${COLOR_RESET} }"
-    line="${line// NOT READY / ${COLOR_RED}NOT READY${COLOR_RESET} }"
-    line="${line// Running / ${COLOR_GREEN}Running${COLOR_RESET} }"
-    line="${line// Stopped / ${COLOR_RED}Stopped${COLOR_RESET} }"
-    line="${line// Reachable / ${COLOR_GREEN}Reachable${COLOR_RESET} }"
-    line="${line// Unreachable / ${COLOR_RED}Unreachable${COLOR_RESET} }"
-    line="${line// WARNING / ${COLOR_YELLOW}WARNING${COLOR_RESET} }"
-    echo "${line}"
 }
 
 # Print top border
@@ -137,11 +155,23 @@ print_header() {
         local hdr="${__hdr_names[i]}"
         local w="${__hdr_widths[i]}"
         local align="${__hdr_aligns[i]:-L}"
+
+        local plain_hdr
+        plain_hdr="$(strip_ansi "${hdr}")"
+        local vis_w=${#plain_hdr}
+        local pad_len=$(( w - vis_w ))
+        if (( pad_len < 0 )); then pad_len=0; fi
+
+        local spaces=""
+        if (( pad_len > 0 )); then
+            printf -v spaces '%*s' "${pad_len}" ''
+        fi
+
         local formatted
         if [[ "${align}" == "R" ]]; then
-            printf -v formatted "%*s" "${w}" "${hdr}"
+            formatted="${spaces}${hdr}"
         else
-            printf -v formatted "%-*s" "${w}" "${hdr}"
+            formatted="${hdr}${spaces}"
         fi
         line+=" ${formatted} │"
     done
@@ -159,15 +189,31 @@ print_row() {
         local val="${__row_cells[i]}"
         local w="${__row_widths[i]}"
         local align="${__row_aligns[i]:-L}"
+
+        local colored_val
+        colored_val="$(colorize_val "${val}")"
+
+        local plain_val
+        plain_val="$(strip_ansi "${val}")"
+
+        local vis_w=${#plain_val}
+        local pad_len=$(( w - vis_w ))
+        if (( pad_len < 0 )); then pad_len=0; fi
+
+        local spaces=""
+        if (( pad_len > 0 )); then
+            printf -v spaces '%*s' "${pad_len}" ''
+        fi
+
         local formatted
         if [[ "${align}" == "R" ]]; then
-            printf -v formatted "%*s" "${w}" "${val}"
+            formatted="${spaces}${colored_val}"
         else
-            printf -v formatted "%-*s" "${w}" "${val}"
+            formatted="${colored_val}${spaces}"
         fi
         line+=" ${formatted} │"
     done
-    colorize_line "${line}"
+    echo "${line}"
 }
 
 print_separator() {
@@ -179,12 +225,6 @@ print_footer() {
 }
 
 # Comprehensive N-column table printer
-# Options:
-#   --title "Title"
-#   --row-separators
-#   --sep-before-last
-#   --no-header
-#   --min-widths "w1 w2 ..."
 print_table_impl() {
     local title=""
     local row_seps=false
@@ -243,13 +283,15 @@ print_table_impl() {
     local num_cells=${#__tbl_data[@]}
     local num_rows=$(( num_cells / num_cols ))
 
-    # Calculate column widths
+    # Calculate column widths using printable character length
     local widths=()
     local c
     for (( c=0; c<num_cols; c++ )); do
         local max_w=0
         if [[ "${no_header}" != "true" ]] && [[ -n "${headers_var}" ]] && [[ ${#__tbl_headers[@]} -gt c ]]; then
-            max_w=${#__tbl_headers[c]}
+            local plain_hdr
+            plain_hdr="$(strip_ansi "${__tbl_headers[c]}")"
+            max_w=${#plain_hdr}
         fi
         if [[ ${#min_widths[@]} -gt c ]] && (( min_widths[c] > max_w )); then
             max_w=${min_widths[c]}
@@ -259,8 +301,10 @@ print_table_impl() {
         for (( r=0; r<num_rows; r++ )); do
             local idx=$(( r * num_cols + c ))
             local val="${__tbl_data[idx]}"
-            if (( ${#val} > max_w )); then
-                max_w=${#val}
+            local plain_val
+            plain_val="$(strip_ansi "${val}")"
+            if (( ${#plain_val} > max_w )); then
+                max_w=${#plain_val}
             fi
         done
         widths+=( "${max_w}" )
@@ -368,11 +412,15 @@ print_kv_table() {
     local -n __kv_vals="${vals_var}"
 
     local headers=("${header1}" "${header2}")
-    local aligns=("L" "${align2}")
 
     local num_rows=${#__kv_keys[@]}
-    local w1=${#header1}
-    local w2=${#header2}
+    local plain_h1
+    plain_h1="$(strip_ansi "${header1}")"
+    local plain_h2
+    plain_h2="$(strip_ansi "${header2}")"
+
+    local w1=${#plain_h1}
+    local w2=${#plain_h2}
     if [[ "${no_header}" == "true" ]]; then
         w1=0
         w2=0
@@ -384,8 +432,12 @@ print_kv_table() {
     for (( i=0; i<num_rows; i++ )); do
         local k="${__kv_keys[i]}"
         local v="${__kv_vals[i]}"
-        if (( ${#k} > w1 )); then w1=${#k}; fi
-        if (( ${#v} > w2 )); then w2=${#v}; fi
+        local plain_k
+        plain_k="$(strip_ansi "${k}")"
+        local plain_v
+        plain_v="$(strip_ansi "${v}")"
+        if (( ${#plain_k} > w1 )); then w1=${#plain_k}; fi
+        if (( ${#plain_v} > w2 )); then w2=${#plain_v}; fi
     done
 
     local widths=("${w1}" "${w2}")
@@ -397,6 +449,7 @@ print_kv_table() {
     print_border_top widths
 
     if [[ "${no_header}" != "true" ]]; then
+        local aligns=("L" "${align2}")
         print_header aligns widths headers
         print_border_middle widths
     fi
@@ -422,3 +475,4 @@ print_kv_table() {
     print_border_bottom widths
     echo ""
 }
+

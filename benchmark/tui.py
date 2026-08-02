@@ -8,20 +8,24 @@ import json
 import curses
 import urllib.request
 import subprocess
+import os
 
-def resolve_endpoint_arg():
+def parse_args():
     cli_ep = None
     args = sys.argv[1:]
     i = 0
     while i < len(args):
         if args[i] == "--endpoint" and i + 1 < len(args):
             cli_ep = args[i + 1]
-            break
+            i += 2
         elif args[i].startswith("--endpoint="):
             cli_ep = args[i].split("=", 1)[1]
-            break
-        i += 1
+            i += 1
+        else:
+            i += 1
+    return cli_ep
 
+def resolve_endpoint(cli_ep):
     try:
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -30,9 +34,8 @@ def resolve_endpoint_arg():
     except Exception:
         return cli_ep or "http://127.0.0.1:11434"
 
-def get_ollama_models(endpoint=None):
+def get_ollama_models(endpoint):
     """Retrieve installed Ollama models via API or CLI."""
-    endpoint = endpoint or resolve_endpoint_arg()
     try:
         req = urllib.request.Request(f"{endpoint}/api/tags")
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -157,9 +160,12 @@ def draw_no_models(stdscr):
     stdscr.refresh()
     stdscr.getch()
 
-def run_tui(stdscr):
-    curses.curs_set(0)
-    models = get_ollama_models()
+def run_tui(stdscr, endpoint):
+    try:
+        curses.curs_set(0)
+    except Exception:
+        pass
+    models = get_ollama_models(endpoint)
 
     if not models:
         draw_no_models(stdscr)
@@ -222,16 +228,48 @@ def run_tui(stdscr):
             elif ch in (ord('q'), ord('Q'), 27):
                 return []
 
-def main():
-    if not sys.stdout.isatty():
-        print(json.dumps([]))
-        sys.exit(0)
+def print_failure_ux(reason):
+    sys.stderr.write(
+        "Interactive benchmark cannot start.\n\n"
+        "Reason\n"
+        f"  {reason}\n\n"
+        "Possible fixes\n"
+        "  - Run in an interactive terminal\n"
+        "  - Specify model arguments directly: aiw benchmark <model>\n"
+        "  - Run all installed models: aiw benchmark --all\n"
+    )
 
-    try:
-        res = curses.wrapper(run_tui)
-        print(json.dumps(res))
-    except Exception:
-        print(json.dumps([]))
+def main():
+    cli_ep = parse_args()
+    endpoint = resolve_endpoint(cli_ep)
+
+    res = []
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        try:
+            res = curses.wrapper(lambda stdscr: run_tui(stdscr, endpoint))
+        except Exception as e:
+            print_failure_ux(f"TUI initialization error ({e}).")
+            sys.exit(1)
+    else:
+        try:
+            tty_fd = os.open("/dev/tty", os.O_RDWR)
+        except Exception as e:
+            print_failure_ux(f"No controlling terminal (/dev/tty) available ({e}).")
+            sys.exit(1)
+
+        with open(tty_fd, "r+", buffering=1) as tty:
+            old_stdin, old_stdout = sys.stdin, sys.stdout
+            sys.stdin, sys.stdout = tty, tty
+            try:
+                res = curses.wrapper(lambda stdscr: run_tui(stdscr, endpoint))
+            except Exception as e:
+                sys.stdin, sys.stdout = old_stdin, old_stdout
+                print_failure_ux(f"TUI initialization error ({e}).")
+                sys.exit(1)
+            finally:
+                sys.stdin, sys.stdout = old_stdin, old_stdout
+
+    print(json.dumps(res))
 
 if __name__ == "__main__":
     main()

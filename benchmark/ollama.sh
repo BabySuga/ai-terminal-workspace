@@ -400,10 +400,17 @@ main() {
     elif [[ ${#models[@]} -eq 0 ]]; then
         # Launch Interactive TUI
         local tui_res
-        tui_res=$(python3 "${TUI_SCRIPT}" --endpoint "${RESOLVED_ENDPOINT}")
+        local tui_status=0
+        tui_res=$(python3 "${TUI_SCRIPT}" --endpoint "${RESOLVED_ENDPOINT}") || tui_status=$?
+
+        if [[ ${tui_status} -ne 0 ]]; then
+            exit 1
+        fi
+
         if [[ -z "${tui_res}" ]] || [[ "${tui_res}" == "[]" ]]; then
             exit 0
         fi
+
         mapfile -t models < <(python3 -c "import sys, json; print('\n'.join(json.loads(sys.argv[1])))" "${tui_res}")
         if [[ ${#models[@]} -eq 0 ]]; then
             exit 0
