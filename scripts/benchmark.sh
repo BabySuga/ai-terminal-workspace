@@ -17,12 +17,15 @@ Usage:
 Examples:
   aiw benchmark
   aiw benchmark qwen3:8b
-  aiw benchmark qwen3:8b hermes3:8b
+  aiw benchmark --cold qwen3:8b
   aiw benchmark --all
+  aiw benchmark --include-cloud --all
   aiw benchmark --repeat 3 qwen3:8b
 
 Options:
-  -a, --all        Benchmark all installed Ollama models
+  -a, --all        Benchmark all installed Ollama models (local generative by default)
+  --include-cloud  Include cloud and remote models when benchmarking --all
+  --cold           Unload target model before benchmarking for reproducible cold start
   -r, --repeat N   Repeat benchmark queue N times
   -h, --help       Print usage information
 EOF

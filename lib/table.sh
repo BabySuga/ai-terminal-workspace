@@ -51,7 +51,7 @@ colorize_val() {
         "Failed"|"Stopped"|"Unreachable"|"NOT READY"|"✗ FAIL"|"Error")
             echo "${COLOR_RED}${val}${COLOR_RESET}"
             ;;
-        "WARNING"|"Warning"|"WARN"|"Warn"|"Warnings")
+        "WARNING"|"Warning"|"WARN"|"Warn"|"Warnings"|"Skipped")
             echo "${COLOR_YELLOW}${val}${COLOR_RESET}"
             ;;
         *)
@@ -463,7 +463,7 @@ print_kv_table() {
         local v="${__kv_vals[i]}"
         local cell_align2="${align2}"
 
-        if [[ "${k}" == "Model" || "${k}" == "Version" || "${k}" == "Config File" || "${k}" == "Ollama Endpoint" || "${k}" == "Endpoint" || "${k}" == "Status" || "${k}" == "Git Commit" || "${k}" == "Build Date" || "${k}" == "Platform" || "${k}" == "Shell" ]]; then
+        if [[ "${k}" == "Model" || "${k}" == "Start Mode" || "${k}" == "Version" || "${k}" == "Config File" || "${k}" == "Ollama Endpoint" || "${k}" == "Endpoint" || "${k}" == "Status" || "${k}" == "Git Commit" || "${k}" == "Build Date" || "${k}" == "Platform" || "${k}" == "Shell" ]]; then
             cell_align2="L"
         fi
 

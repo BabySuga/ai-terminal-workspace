@@ -203,8 +203,26 @@ Inventory of models installed and verified on the reference workstation:
 
 ---
 
-## Benchmark Notes
+## Benchmark Flags & Usage Modes
 
+| Flag / Option | Description |
+| :--- | :--- |
+| `aiw benchmark` | Launches the interactive curses TUI menu to select single or multiple models for queued benchmarking. |
+| `aiw benchmark <model>` | Runs benchmark directly on specified model(s). |
+| `--cold` | Unloads target model before benchmarking to force a cold-start measurement (`aiw benchmark --cold qwen3:8b`). |
+| `-a`, `--all` | Benchmarks all installed models. Focuses on local generative models by default. |
+| `--include-cloud` | Includes cloud and remote models (e.g., `gpt-oss:120b-cloud`) when benchmarking with `--all`. |
+| `-r`, `--repeat N` | Repeats the benchmark queue N times for statistical averaging. |
+| `--endpoint URL` | Overrides the target Ollama service endpoint URL. |
+
+---
+
+## Benchmark Behavior & Optimization Notes
+
+- **Interactive TUI Mode**: Displays a terminal-native interactive menu when `aiw benchmark` is called without arguments. Gracefully displays diagnostic messages in non-interactive terminals.
+- **Embedding Models Skipped**: Text embedding models (such as `nomic-embed-text`) do not support text generation APIs. AIW automatically detects embedding models and marks them as `Skipped` without counting them as benchmark failures.
+- **Local vs Cloud Filtering**: By default, `aiw benchmark --all` benchmarks local generative models to focus on local AI workstation performance. Cloud and remote models are skipped unless `--include-cloud` is explicitly passed.
+- **Cold vs Warm Start Detection**: Measures and reports initial model load state (`Start Mode: Cold` vs `Start Mode: Warm`). TTFT varies significantly depending on whether model weights are already cached in VRAM or loaded cold from disk storage.
 - All benchmarks were collected sequentially on the reference workstation using default prompt configurations.
 - Actual benchmark performance in end-user environments will vary based on:
   - **Hardware Architecture**: GPU core count, memory bandwidth, and bus interface.

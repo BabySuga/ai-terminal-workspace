@@ -21,12 +21,15 @@ Usage:
 Examples:
   aiw benchmark
   aiw benchmark qwen3:8b
-  aiw benchmark qwen3:8b hermes3:8b
+  aiw benchmark --cold qwen3:8b
   aiw benchmark --all
+  aiw benchmark --include-cloud --all
   aiw benchmark --repeat 3 qwen3:8b
 
 Options:
-  -a, --all        Benchmark all installed Ollama models
+  -a, --all        Benchmark all installed Ollama models (local generative by default)
+  --include-cloud  Include cloud and remote models when benchmarking --all
+  --cold           Unload target model before benchmarking for reproducible cold start
   -r, --repeat N   Repeat benchmark queue N times
   --endpoint URL   Override Ollama endpoint URL
   -h, --help       Print usage information
@@ -95,38 +98,85 @@ parse_power() {
 }
 
 get_installed_models() {
-    python3 - "${RESOLVED_ENDPOINT}" << 'PYEOF'
+    local inc_cloud="$1"
+    python3 - "${RESOLVED_ENDPOINT}" "${inc_cloud}" << 'PYEOF'
 import json, urllib.request, subprocess, sys
+
 endpoint = sys.argv[1]
+include_cloud = sys.argv[2].lower() == "true" if len(sys.argv) > 2 else False
+
+def is_embedding(model_name, show_data):
+    name_lower = model_name.lower()
+    if any(k in name_lower for k in ["embed", "bge", "minilm", "e5-"]):
+        return True
+    if show_data:
+        minfo = show_data.get("model_info", {})
+        gtype = minfo.get("general.type", "").lower()
+        arch = minfo.get("general.architecture", "").lower()
+        family = show_data.get("details", {}).get("family", "").lower()
+        families = [f.lower() for f in show_data.get("details", {}).get("families", []) or []]
+        if gtype == "embedding" or "bert" in arch or "bert" in family or any("bert" in f for f in families):
+            return True
+        if "embedding" in arch or "embedding" in family or any("embedding" in f for f in families):
+            return True
+    return False
+
+def is_cloud(model_name, show_data):
+    name_lower = model_name.lower()
+    if "-cloud" in name_lower or ":cloud" in name_lower or "cloud" in name_lower or "-remote" in name_lower or ":remote" in name_lower:
+        return True
+    if show_data:
+        fmt = show_data.get("details", {}).get("format", "")
+        if fmt == "":
+            return True
+    return False
+
+raw_models = []
 try:
     req = urllib.request.Request(f"{endpoint}/api/tags")
     with urllib.request.urlopen(req, timeout=5) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-        models = [m["name"] for m in data.get("models", [])]
-        if models:
-            print("\n".join(models))
-            sys.exit(0)
+        raw_models = [m["name"] for m in data.get("models", [])]
 except Exception:
     pass
 
-try:
-    out = subprocess.check_output(["ollama", "list"], text=True, stderr=subprocess.DEVNULL)
-    lines = out.strip().split("\n")
-    models = []
-    for line in lines[1:]:
-        parts = line.split()
-        if parts:
-            models.append(parts[0])
-    if models:
-        print("\n".join(models))
-        sys.exit(0)
-except Exception:
-    pass
+if not raw_models:
+    try:
+        out = subprocess.check_output(["ollama", "list"], text=True, stderr=subprocess.DEVNULL)
+        lines = out.strip().split("\n")
+        for line in lines[1:]:
+            parts = line.split()
+            if parts:
+                raw_models.append(parts[0])
+    except Exception:
+        pass
+
+filtered_models = []
+for model in raw_models:
+    show_data = None
+    try:
+        sreq = urllib.request.Request(f"{endpoint}/api/show", data=json.dumps({"name": model}).encode("utf-8"), headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(sreq, timeout=3) as sresp:
+            show_data = json.loads(sresp.read().decode("utf-8"))
+    except Exception:
+        pass
+
+    if is_embedding(model, show_data):
+        continue
+
+    if not include_cloud and is_cloud(model, show_data):
+        continue
+
+    filtered_models.append(model)
+
+if filtered_models:
+    print("\n".join(filtered_models))
 PYEOF
 }
 
 run_single_benchmark() {
     local model="$1"
+    local cold_mode="${2:-false}"
 
     if [[ ! -f "${PROMPT_FILE}" ]]; then
         echo "Error: Benchmark prompt file '${PROMPT_FILE}' not found." >&2
@@ -141,6 +191,35 @@ run_single_benchmark() {
         return 1
     fi
 
+    if [[ "${cold_mode}" == "true" ]]; then
+        local unload_ok
+        unload_ok=$(python3 - "${model}" "${RESOLVED_ENDPOINT}" << 'PYEOF'
+import sys, json, urllib.request, subprocess
+model = sys.argv[1]
+endpoint = sys.argv[2]
+
+try:
+    payload = json.dumps({"model": model, "keep_alive": 0}).encode("utf-8")
+    req = urllib.request.Request(f"{endpoint}/api/generate", data=payload, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+    print("true")
+except Exception:
+    try:
+        res = subprocess.run(["ollama", "stop", model], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        if res.returncode == 0:
+            print("true")
+        else:
+            print("false")
+    except Exception:
+        print("false")
+PYEOF
+)
+        if [[ "${unload_ok}" != "true" ]]; then
+            echo "Warning: Could not unload model '${model}' before benchmark." >&2
+        fi
+    fi
+
     # 1. GPU metrics BEFORE benchmark
     local gpu_before_json
     gpu_before_json=$(get_gpu_metrics)
@@ -149,7 +228,7 @@ run_single_benchmark() {
     local power_before
     power_before=$(parse_power "${gpu_before_json}")
 
-    # 2. Run streaming benchmark via python HTTP streaming client
+    # 2. Run benchmark check & streaming generate call via python client
     local bench_result
     bench_result=$(python3 - "${model}" "${prompt}" "${RESOLVED_ENDPOINT}" << 'PYEOF'
 import sys, json, time, urllib.request, urllib.error, socket
@@ -157,8 +236,55 @@ import sys, json, time, urllib.request, urllib.error, socket
 model = sys.argv[1]
 prompt = sys.argv[2]
 endpoint = sys.argv[3]
-url = f"{endpoint}/api/generate"
 
+# 1. Check if model is loaded (Warm vs Cold)
+is_warm = False
+try:
+    req = urllib.request.Request(f"{endpoint}/api/ps")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        ps_data = json.loads(resp.read().decode("utf-8"))
+        loaded_models = [m.get("name", "") for m in ps_data.get("models", [])] + \
+                        [m.get("model", "") for m in ps_data.get("models", [])]
+        if model in loaded_models:
+            is_warm = True
+except Exception:
+    pass
+
+start_mode = "Warm" if is_warm else "Cold"
+
+# 2. Check if embedding model
+show_data = None
+try:
+    sreq = urllib.request.Request(f"{endpoint}/api/show", data=json.dumps({"name": model}).encode("utf-8"), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(sreq, timeout=5) as sresp:
+        show_data = json.loads(sresp.read().decode("utf-8"))
+except Exception:
+    pass
+
+is_embedding = False
+model_lower = model.lower()
+if any(k in model_lower for k in ["embed", "bge", "minilm", "e5-"]):
+    is_embedding = True
+elif show_data:
+    minfo = show_data.get("model_info", {})
+    gtype = minfo.get("general.type", "").lower()
+    arch = minfo.get("general.architecture", "").lower()
+    family = show_data.get("details", {}).get("family", "").lower()
+    families = [f.lower() for f in show_data.get("details", {}).get("families", []) or []]
+    if gtype == "embedding" or "bert" in arch or "bert" in family or any("bert" in f for f in families):
+        is_embedding = True
+    elif "embedding" in arch or "embedding" in family or any("embedding" in f for f in families):
+        is_embedding = True
+
+if is_embedding:
+    print(json.dumps({
+        "skipped": True,
+        "reason": "Embedding model (generate API unsupported)"
+    }))
+    sys.exit(0)
+
+# 3. Text generation benchmark
+url = f"{endpoint}/api/generate"
 payload = json.dumps({
     "model": model,
     "prompt": prompt,
@@ -219,6 +345,7 @@ try:
 
     result = {
         "success": True,
+        "start_mode": start_mode,
         "ttft_ms": round(ttft_ms),
         "gen_speed_tok_s": round(gen_speed),
         "latency_s": round(total_latency_s, 2),
@@ -246,7 +373,6 @@ except urllib.error.URLError as e:
     else:
         print(json.dumps({"error": f"Ollama service is stopped or unreachable at {endpoint}."}))
     sys.exit(0)
-    sys.exit(0)
 
 except (socket.timeout, TimeoutError):
     print(json.dumps({"error": "Benchmark request timed out."}))
@@ -260,13 +386,26 @@ PYEOF
 
     if [[ -z "${bench_result}" ]]; then
         echo "Error: Failed to execute benchmark for ${model}." >&2
+        RESULT_STATUS="error"
         return 1
+    fi
+
+    if echo "${bench_result}" | jq -e '.skipped' >/dev/null 2>&1; then
+        local reason
+        reason=$(echo "${bench_result}" | jq -r '.reason // "Generate API unsupported"')
+        echo "Skipped"
+        echo ""
+        echo "Reason"
+        echo "${reason}"
+        RESULT_STATUS="skipped"
+        return 0
     fi
 
     if echo "${bench_result}" | jq -e '.error' >/dev/null 2>&1; then
         local err_msg
         err_msg=$(echo "${bench_result}" | jq -r '.error')
         echo "Error: ${err_msg}" >&2
+        RESULT_STATUS="error"
         return 1
     fi
 
@@ -279,7 +418,8 @@ PYEOF
     power_after=$(parse_power "${gpu_after_json}")
 
     # Parse metrics
-    local ttft_ms gen_speed latency_s chars words approx_tokens
+    local start_mode ttft_ms gen_speed latency_s chars words approx_tokens
+    start_mode=$(echo "${bench_result}" | jq -r '.start_mode')
     ttft_ms=$(echo "${bench_result}" | jq -r '.ttft_ms')
     gen_speed=$(echo "${bench_result}" | jq -r '.gen_speed_tok_s')
     latency_s=$(echo "${bench_result}" | jq -r '.latency_s')
@@ -293,6 +433,7 @@ PYEOF
 
     local metrics=(
         "Model"
+        "Start Mode"
         "TTFT"
         "Generation Speed"
         "Latency"
@@ -302,6 +443,7 @@ PYEOF
     )
     local vals=(
         "${model}"
+        "${start_mode}"
         "$(printf "%.0f ms" "${ttft_ms}")"
         "$(printf "%.0f tok/s" "${gen_speed}")"
         "$(printf "%.2f s" "${latency_s}")"
@@ -321,7 +463,8 @@ PYEOF
 
     print_table --title "GPU Telemetry" --min-widths "17 18 18" gpu_headers gpu_aligns gpu_data
 
-    # Return metric values for caller
+    RESULT_STATUS="success"
+    RESULT_START_MODE="${start_mode}"
     RESULT_TTFT_MS="${ttft_ms}"
     RESULT_GEN_SPEED="${gen_speed}"
     RESULT_LATENCY_S="${latency_s}"
@@ -334,6 +477,8 @@ main() {
     fi
 
     local run_all=false
+    local include_cloud=false
+    local cold_mode=false
     local repeat_count=1
     local cli_endpoint=""
     local models=()
@@ -346,6 +491,14 @@ main() {
                 ;;
             -a|--all)
                 run_all=true
+                shift
+                ;;
+            --include-cloud)
+                include_cloud=true
+                shift
+                ;;
+            --cold)
+                cold_mode=true
                 shift
                 ;;
             -r|--repeat)
@@ -392,9 +545,9 @@ main() {
 
     # Build initial list of models
     if [[ "${run_all}" == "true" ]]; then
-        mapfile -t models < <(get_installed_models)
+        mapfile -t models < <(get_installed_models "${include_cloud}")
         if [[ ${#models[@]} -eq 0 ]]; then
-            echo "Error: No installed Ollama models found." >&2
+            echo "Error: No installed Ollama models found matching benchmark criteria." >&2
             exit 1
         fi
     elif [[ ${#models[@]} -eq 0 ]]; then
@@ -443,11 +596,15 @@ main() {
         echo "${model}"
         echo "↓"
 
+        RESULT_STATUS=""
+        RESULT_START_MODE=""
         RESULT_TTFT_MS=""
         RESULT_GEN_SPEED=""
         RESULT_LATENCY_S=""
 
-        if run_single_benchmark "${model}"; then
+        run_single_benchmark "${model}" "${cold_mode}" || true
+
+        if [[ "${RESULT_STATUS}" == "success" ]]; then
             summary_json=$(python3 - "${summary_json}" "${model}" "${RESULT_TTFT_MS}" "${RESULT_GEN_SPEED}" "${RESULT_LATENCY_S}" << 'PYEOF'
 import sys, json
 results = json.loads(sys.argv[1])
@@ -457,9 +614,23 @@ gen_speed = float(sys.argv[4])
 latency_s = float(sys.argv[5])
 results.append({
     "model": model,
+    "status": "success",
     "ttft_ms": ttft_ms,
     "gen_speed": gen_speed,
     "latency_s": latency_s
+})
+print(json.dumps(results))
+PYEOF
+)
+        elif [[ "${RESULT_STATUS}" == "skipped" ]]; then
+            summary_json=$(python3 - "${summary_json}" "${model}" << 'PYEOF'
+import sys, json
+results = json.loads(sys.argv[1])
+model = sys.argv[2]
+results.append({
+    "model": model,
+    "status": "skipped",
+    "skipped": True
 })
 print(json.dumps(results))
 PYEOF
@@ -471,6 +642,7 @@ results = json.loads(sys.argv[1])
 model = sys.argv[2]
 results.append({
     "model": model,
+    "status": "error",
     "error": True
 })
 print(json.dumps(results))
@@ -499,13 +671,15 @@ PYEOF
         local data=()
 
         local successful_count
-        successful_count=$(echo "${summary_json}" | jq '[.[] | select(.error != true)] | length')
+        successful_count=$(echo "${summary_json}" | jq '[.[] | select(.status == "success")] | length')
+        local skipped_count
+        skipped_count=$(echo "${summary_json}" | jq '[.[] | select(.status == "skipped")] | length')
         local failed_count
-        failed_count=$(echo "${summary_json}" | jq '[.[] | select(.error == true)] | length')
+        failed_count=$(echo "${summary_json}" | jq '[.[] | select(.status == "error")] | length')
         local total_latency_sum
-        total_latency_sum=$(echo "${summary_json}" | jq '[.[] | select(.error != true) | .latency_s] | add // 0')
+        total_latency_sum=$(echo "${summary_json}" | jq '[.[] | select(.status == "success") | .latency_s] | add // 0')
 
-        mapfile -t model_rows < <(echo "${summary_json}" | jq -r '.[] | [.model, (if .error then "Error" else (((.ttft_ms / 1000 * 100 | round / 100) | tostring) + "s") end), (if .error then "Error" else (.gen_speed | round | tostring) end), (if .error then "Error" else (((.latency_s * 10 | round / 10) | tostring) + "s") end)] | join("\t")' 2>/dev/null)
+        mapfile -t model_rows < <(echo "${summary_json}" | jq -r '.[] | [.model, (if .status == "skipped" then "Skipped" elif .status == "error" then "Error" else (((.ttft_ms / 1000 * 100 | round / 100) | tostring) + "s") end), (if .status == "skipped" then "Skipped" elif .status == "error" then "Error" else (.gen_speed | round | tostring) end), (if .status == "skipped" then "Skipped" elif .status == "error" then "Error" else (((.latency_s * 10 | round / 10) | tostring) + "s") end)] | join("\t")' 2>/dev/null)
 
         local row
         for row in "${model_rows[@]}"; do
@@ -524,8 +698,8 @@ PYEOF
             end
         ' -r)
 
-        local sum_keys=("Models Tested" "Successful" "Failed" "Total Time")
-        local sum_vals=("${summary_count}" "${successful_count}" "${failed_count}" "${total_time_fmt}")
+        local sum_keys=("Models Tested" "Successful" "Skipped" "Failed" "Total Time")
+        local sum_vals=("${summary_count}" "${successful_count}" "${skipped_count}" "${failed_count}" "${total_time_fmt}")
         print_kv_table --title "Summary" --no-header --align2 R --min-width1 28 --min-width2 11 sum_keys sum_vals
     fi
 }

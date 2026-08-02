@@ -244,32 +244,51 @@ def main():
     endpoint = resolve_endpoint(cli_ep)
 
     res = []
-    if sys.stdin.isatty() and sys.stdout.isatty():
-        try:
-            res = curses.wrapper(lambda stdscr: run_tui(stdscr, endpoint))
-        except Exception as e:
-            print_failure_ux(f"TUI initialization error ({e}).")
-            sys.exit(1)
-    else:
-        try:
-            tty_fd = os.open("/dev/tty", os.O_RDWR)
-        except Exception as e:
-            print_failure_ux(f"No controlling terminal (/dev/tty) available ({e}).")
-            sys.exit(1)
+    fin = None
+    fout = None
 
-        with open(tty_fd, "r+", buffering=1) as tty:
-            old_stdin, old_stdout = sys.stdin, sys.stdout
-            sys.stdin, sys.stdout = tty, tty
+    try:
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            res = curses.wrapper(lambda stdscr: run_tui(stdscr, endpoint))
+        else:
             try:
-                res = curses.wrapper(lambda stdscr: run_tui(stdscr, endpoint))
+                fin = open("/dev/tty", "r")
+                fout = open("/dev/tty", "w")
             except Exception as e:
-                sys.stdin, sys.stdout = old_stdin, old_stdout
+                print_failure_ux(f"No controlling terminal (/dev/tty) available ({e}).")
+                sys.exit(1)
+
+            try:
+                term_name = os.environ.get("TERM", "xterm-256color")
+                term = curses.newterm(term_name, fout, fin)
+                curses.set_term(term)
+                stdscr = curses.initscr()
+            except Exception as e:
                 print_failure_ux(f"TUI initialization error ({e}).")
                 sys.exit(1)
+
+            try:
+                res = run_tui(stdscr, endpoint)
             finally:
-                sys.stdin, sys.stdout = old_stdin, old_stdout
+                try:
+                    curses.nocbreak()
+                    if 'stdscr' in locals():
+                        stdscr.keypad(False)
+                    curses.echo()
+                    curses.endwin()
+                except Exception:
+                    pass
+    except Exception as e:
+        print_failure_ux(f"Unexpected TUI error ({e}).")
+        sys.exit(1)
+    finally:
+        if fin and not fin.closed:
+            fin.close()
+        if fout and not fout.closed:
+            fout.close()
 
     print(json.dumps(res))
 
 if __name__ == "__main__":
     main()
+
